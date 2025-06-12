@@ -231,6 +231,37 @@ void Camera3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 			ADD_TRIANGLE(tup, right + up + back, -right + up + back);
 		} break;
 
+		/*
+		case Camera3D::PROJECTION_ORTHOGONAL: {
+			Camera3D::KeepAspect aspect = camera->get_keep_aspect_mode();
+
+			float size = camera->get_size();
+			float keep_size = size * 0.5;
+
+			Vector3 right, up;
+			Vector3 back(0, 0, -1.0);
+
+			if (aspect == Camera3D::KeepAspect::KEEP_WIDTH) {
+				right = Vector3(keep_size, 0, 0);
+				up = Vector3(0, keep_size / viewport_aspect, 0);
+				handles.push_back(right + back);
+			} else {
+				right = Vector3(keep_size * viewport_aspect, 0, 0);
+				up = Vector3(0, keep_size, 0);
+				handles.push_back(up + back);
+			}
+
+			ADD_QUAD(-up - right, -up + right, up + right, up - right);
+			ADD_QUAD(-up - right + back, -up + right + back, up + right + back, up - right + back);
+			ADD_QUAD(up + right, up + right + back, up - right + back, up - right);
+			ADD_QUAD(-up + right, -up + right + back, -up - right + back, -up - right);
+
+			right.x = MIN(right.x, keep_size * 0.25);
+			Vector3 tup(0, up.y + keep_size / 2, back.z);
+			ADD_TRIANGLE(tup, right + up + back, -right + up + back);
+		} break;
+		*/
+
 		case Camera3D::PROJECTION_FRUSTUM: {
 			float hsize = camera->get_size() / 2.0;
 

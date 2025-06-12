@@ -96,6 +96,16 @@ void RendererSceneCull::camera_set_orthogonal(RID p_camera, float p_size, float 
 	camera->zfar = p_z_far;
 }
 
+void RendererSceneCull::camera_set_stretched_orthogonal(RID p_camera, float p_size, float p_ratio, float p_z_near, float p_z_far) {
+	Camera *camera = camera_owner.get_or_null(p_camera);
+	ERR_FAIL_NULL(camera);
+	camera->type = Camera::STRETCHED_ORTHOGONAL;
+	camera->size = p_size;
+	camera->ratio = p_ratio;
+	camera->znear = p_z_near;
+	camera->zfar = p_z_far;
+}
+
 void RendererSceneCull::camera_set_frustum(RID p_camera, float p_size, Vector2 p_offset, float p_z_near, float p_z_far) {
 	Camera *camera = camera_owner.get_or_null(p_camera);
 	ERR_FAIL_NULL(camera);
@@ -2652,6 +2662,15 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 						camera->zfar,
 						camera->vaspect);
 				is_frustum = true;
+			} break;
+			case Camera::STRETCHED_ORTHOGONAL: {
+				projection.set_orthogonal(
+						camera->size,
+						p_viewport_size.width / (float)p_viewport_size.height * camera->ratio,
+						camera->znear,
+						camera->zfar,
+						camera->vaspect);
+				is_orthogonal = true;
 			} break;
 		}
 
