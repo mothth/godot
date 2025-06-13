@@ -163,11 +163,11 @@
 				Sets camera to use orthogonal projection, also known as orthographic projection. Objects remain the same size on the screen no matter how far away they are.
 			</description>
 		</method>
-		<method name="camera_set_stretched_orthogonal">
+		<method name="camera_set_orthogonal_scaled">
 			<return type="void" />
 			<param index="0" name="camera" type="RID" />
 			<param index="1" name="size" type="float" />
-			<param index="2" name="ratio" type="float" />
+			<param index="2" name="ratio_scale" type="float" />
 			<param index="3" name="z_near" type="float" />
 			<param index="4" name="z_far" type="float" />
 			<description>
