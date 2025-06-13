@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_span.h                                                           */
+/*  nav_region_builder_2d.h                                               */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,41 +30,19 @@
 
 #pragma once
 
-#include "core/templates/span.h"
+#include "../nav_utils_2d.h"
 
-#include "tests/test_macros.h"
+struct NavRegionIterationBuild2D;
 
-namespace TestSpan {
+class NavRegionBuilder2D {
+	static void _build_step_process_navmesh_data(NavRegionIterationBuild2D &r_build);
+	static void _build_step_find_edge_connection_pairs(NavRegionIterationBuild2D &r_build);
+	static void _build_step_merge_edge_connection_pairs(NavRegionIterationBuild2D &r_build);
+	static void _build_update_iteration(NavRegionIterationBuild2D &r_build);
 
-TEST_CASE("[Span] Constexpr Validators") {
-	constexpr Span<uint16_t> span_empty;
-	static_assert(span_empty.ptr() == nullptr);
-	static_assert(span_empty.size() == 0);
-	static_assert(span_empty.is_empty());
+public:
+	static Nav2D::PointKey get_point_key(const Vector2 &p_pos, const Vector2 &p_cell_size);
+	static Nav2D::EdgeKey get_edge_key(const Vector2 &p_vertex1, const Vector2 &p_vertex2, const Vector2 &p_cell_size);
 
-	constexpr static uint16_t value = 5;
-	Span<uint16_t> span_value(&value, 1);
-	CHECK(span_value.ptr() == &value);
-	CHECK(span_value.size() == 1);
-	CHECK(!span_value.is_empty());
-
-	static constexpr int ints[] = { 0, 1, 2, 3, 4, 5 };
-	constexpr Span<int> span_array = ints;
-	static_assert(span_array.size() == 6);
-	static_assert(!span_array.is_empty());
-	static_assert(span_array[0] == 0);
-	static_assert(span_array[span_array.size() - 1] == 5);
-
-	constexpr Span<char32_t> span_string = U"122345";
-	static_assert(span_string.size() == 6);
-	static_assert(!span_string.is_empty());
-	static_assert(span_string[0] == U'1');
-	static_assert(span_string[span_string.size() - 1] == U'5');
-
-	int idx = 0;
-	for (const char32_t &chr : span_string) {
-		CHECK_EQ(chr, span_string[idx++]);
-	}
-}
-
-} // namespace TestSpan
+	static void build_iteration(NavRegionIterationBuild2D &r_build);
+};
