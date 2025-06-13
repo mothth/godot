@@ -132,14 +132,14 @@
 				As a hint, 3D games that look 2D often use this projection, with [param size] specified in pixels.
 			</description>
 		</method>
-		<method name="set_stretched_orthogonal">
+		<method name="set_orthogonal_scaled">
 			<return type="void" />
 			<param index="0" name="size" type="float" />
-			<param index="1" name="ratio" type="float" />
+			<param index="1" name="ratio_scale" type="float" />
 			<param index="2" name="z_near" type="float" />
 			<param index="3" name="z_far" type="float" />
 			<description>
-				Sets the camera projection to stretched orthogonal mode (see [constant PROJECTION_STRETCHED_ORTHOGONAL]), by specifying a [param size], [param ratio], and the [param z_near] and [param z_far] clip planes in world space units.
+				Sets the camera projection to orthogonal mode (see [constant PROJECTION_ORTHOGONAL]) with a stretched aspect ratio, by specifying a [param size], [param ratio], and the [param z_near] and [param z_far] clip planes in world space units.
 			</description>
 		</method>
 		<method name="set_perspective">
@@ -219,8 +219,8 @@
 		<member name="size" type="float" setter="set_size" getter="get_size" default="1.0">
 			The camera's size in meters measured as the diameter of the width or height, depending on [member keep_aspect]. Only applicable in orthogonal and frustum modes.
 		</member>
-		<member name="ratio" type="float" setter="set_ratio" getter="get_ratio" default="1.0">
-			The camera's width or height is scaled by this amount, depending on [member keep_aspect]. Only applicable in stretched orthogonal mode.
+		<member name="ratio_scale" type="float" setter="set_ratio_scale" getter="get_ratio_scale" default="1.0">
+			The camera's aspect ratio is scaled by this amount. Only applicable in orthogonal mode.
 		</member>
 		<member name="v_offset" type="float" setter="set_v_offset" getter="get_v_offset" default="0.0">
 			The vertical (Y) offset of the camera viewport.
@@ -235,9 +235,6 @@
 		</constant>
 		<constant name="PROJECTION_FRUSTUM" value="2" enum="ProjectionType">
 			Frustum projection. This mode allows adjusting [member frustum_offset] to create "tilted frustum" effects.
-		</constant>
-		<constant name="PROJECTION_STRETCHED_ORTHOGONAL" value="3" enum="ProjectionType">
-			Orthographic projection, but the projection can be stretched.
 		</constant>
 		<constant name="KEEP_WIDTH" value="0" enum="KeepAspect">
 			Preserves the horizontal aspect ratio; also known as Vert- scaling. This is usually the best option for projects running in portrait mode, as taller aspect ratios will benefit from a wider vertical FOV.
