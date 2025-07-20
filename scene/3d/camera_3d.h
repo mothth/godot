@@ -67,6 +67,7 @@ private:
 
 	real_t fov = 75.0;
 	real_t size = 1.0;
+	real_t stretch = 1.0;
 	Vector2 frustum_offset;
 	// _ prefix to avoid conflict with Windows defines.
 	real_t _near = 0.05;
@@ -150,6 +151,7 @@ public:
 
 	void set_perspective(real_t p_fovy_degrees, real_t p_z_near, real_t p_z_far);
 	void set_orthogonal(real_t p_size, real_t p_z_near, real_t p_z_far);
+	void set_orthogonal_stretched(real_t p_size, real_t p_stretch, real_t p_z_near, real_t p_z_far);
 	void set_frustum(real_t p_size, Vector2 p_offset, real_t p_z_near, real_t p_z_far);
 	void set_projection(Camera3D::ProjectionType p_mode);
 
@@ -162,6 +164,7 @@ public:
 
 	real_t get_fov() const;
 	real_t get_size() const;
+	real_t get_stretch() const;
 	real_t get_far() const;
 	real_t get_near() const;
 	Vector2 get_frustum_offset() const;
@@ -170,6 +173,7 @@ public:
 
 	void set_fov(real_t p_fov);
 	void set_size(real_t p_size);
+	void set_stretch(real_t p_size);
 	void set_far(real_t p_far);
 	void set_near(real_t p_near);
 	void set_frustum_offset(Vector2 p_offset);

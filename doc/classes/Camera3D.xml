@@ -131,6 +131,16 @@
 				Sets the camera projection to orthogonal mode (see [constant PROJECTION_ORTHOGONAL]), by specifying a [param size], and the [param z_near] and [param z_far] clip planes in world space units. (As a hint, 2D games often use this projection, with values specified in pixels.)
 			</description>
 		</method>
+		<method name="set_orthogonal_stretched">
+			<return type="void" />
+			<param index="0" name="size" type="float" />
+			<param index="1" name="streched" type="float" />
+			<param index="2" name="z_near" type="float" />
+			<param index="3" name="z_far" type="float" />
+			<description>
+				Sets the camera projection to orthogonal mode (see [constant PROJECTION_ORTHOGONAL]), by specifying a [param size], and the [param z_near] and [param z_far] clip planes in world space units. (As a hint, 2D games often use this projection, with values specified in pixels.)
+			</description>
+		</method>
 		<method name="set_perspective">
 			<return type="void" />
 			<param index="0" name="fov" type="float" />
@@ -207,6 +217,9 @@
 		</member>
 		<member name="size" type="float" setter="set_size" getter="get_size" default="1.0">
 			The camera's size in meters measured as the diameter of the width or height, depending on [member keep_aspect]. Only applicable in orthogonal and frustum modes.
+		</member>
+		<member name="stretch" type="float" setter="set_stretch" getter="get_stretch" default="1.0">
+			The stretch factor for the camera's aspect ratio. Only intended for use with orthogonal mode and with [member keep_aspect] as KEEP_WIDTH, as this is for personal use and that's all I need.
 		</member>
 		<member name="v_offset" type="float" setter="set_v_offset" getter="get_v_offset" default="0.0">
 			The vertical (Y) offset of the camera viewport.

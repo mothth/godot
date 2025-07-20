@@ -49,7 +49,7 @@ void Camera3D::_update_camera_mode() {
 
 		} break;
 		case PROJECTION_ORTHOGONAL: {
-			set_orthogonal(size, _near, _far);
+			set_orthogonal_stretched(size, stretch, _near, _far);
 		} break;
 		case PROJECTION_FRUSTUM: {
 			set_frustum(size, frustum_offset, _near, _far);
@@ -64,6 +64,10 @@ void Camera3D::_validate_property(PropertyInfo &p_property) const {
 		}
 	} else if (p_property.name == "size") {
 		if (mode != PROJECTION_ORTHOGONAL && mode != PROJECTION_FRUSTUM) {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+	} else if (p_property.name == "stretch") {
+		if (mode != PROJECTION_ORTHOGONAL) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 	} else if (p_property.name == "frustum_offset") {
@@ -305,7 +309,7 @@ Projection Camera3D::_get_camera_projection(real_t p_near) const {
 			cm.set_perspective(fov, viewport_size.aspect(), p_near, _far, keep_aspect == KEEP_WIDTH);
 		} break;
 		case PROJECTION_ORTHOGONAL: {
-			cm.set_orthogonal(size, viewport_size.aspect(), p_near, _far, keep_aspect == KEEP_WIDTH);
+			cm.set_orthogonal(size, viewport_size.aspect() * stretch, p_near, _far, keep_aspect == KEEP_WIDTH);
 		} break;
 		case PROJECTION_FRUSTUM: {
 			cm.set_frustum(size, viewport_size.aspect(), frustum_offset, p_near, _far);
@@ -347,7 +351,24 @@ void Camera3D::set_orthogonal(real_t p_size, real_t p_z_near, real_t p_z_far) {
 	mode = PROJECTION_ORTHOGONAL;
 	force_change = false;
 
-	RenderingServer::get_singleton()->camera_set_orthogonal(camera, size, _near, _far);
+	RenderingServer::get_singleton()->camera_set_orthogonal_stretched(camera, size, stretch, _near, _far);
+	update_gizmos();
+}
+
+void Camera3D::set_orthogonal_stretched(real_t p_size, real_t p_stretch, real_t p_z_near, real_t p_z_far) {
+	if (!force_change && size == p_size && stretch == p_stretch && p_z_near == _near && p_z_far == _far && mode == PROJECTION_ORTHOGONAL) {
+		return;
+	}
+
+	size = p_size;
+	stretch = p_stretch;
+
+	_near = p_z_near;
+	_far = p_z_far;
+	mode = PROJECTION_ORTHOGONAL;
+	force_change = false;
+
+	RenderingServer::get_singleton()->camera_set_orthogonal_stretched(camera, size, stretch, _near, _far);
 	update_gizmos();
 }
 
@@ -455,10 +476,10 @@ Vector3 Camera3D::project_ray_origin(const Point2 &p_pos) const {
 		Vector2 pos = cpos / viewport_size;
 		real_t vsize, hsize;
 		if (keep_aspect == KEEP_WIDTH) {
-			vsize = size / viewport_size.aspect();
+			vsize = size / viewport_size.aspect() / stretch;
 			hsize = size;
 		} else {
-			hsize = size * viewport_size.aspect();
+			hsize = size * viewport_size.aspect() * stretch;
 			vsize = size;
 		}
 
@@ -653,6 +674,7 @@ void Camera3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("project_position", "screen_point", "z_depth"), &Camera3D::project_position);
 	ClassDB::bind_method(D_METHOD("set_perspective", "fov", "z_near", "z_far"), &Camera3D::set_perspective);
 	ClassDB::bind_method(D_METHOD("set_orthogonal", "size", "z_near", "z_far"), &Camera3D::set_orthogonal);
+	ClassDB::bind_method(D_METHOD("set_orthogonal_stretched", "size", "stretch", "z_near", "z_far"), &Camera3D::set_orthogonal_stretched);
 	ClassDB::bind_method(D_METHOD("set_frustum", "size", "offset", "z_near", "z_far"), &Camera3D::set_frustum);
 	ClassDB::bind_method(D_METHOD("make_current"), &Camera3D::make_current);
 	ClassDB::bind_method(D_METHOD("clear_current", "enable_next"), &Camera3D::clear_current, DEFVAL(true));
@@ -663,11 +685,13 @@ void Camera3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_fov"), &Camera3D::get_fov);
 	ClassDB::bind_method(D_METHOD("get_frustum_offset"), &Camera3D::get_frustum_offset);
 	ClassDB::bind_method(D_METHOD("get_size"), &Camera3D::get_size);
+	ClassDB::bind_method(D_METHOD("get_stretch"), &Camera3D::get_stretch);
 	ClassDB::bind_method(D_METHOD("get_far"), &Camera3D::get_far);
 	ClassDB::bind_method(D_METHOD("get_near"), &Camera3D::get_near);
 	ClassDB::bind_method(D_METHOD("set_fov", "fov"), &Camera3D::set_fov);
 	ClassDB::bind_method(D_METHOD("set_frustum_offset", "offset"), &Camera3D::set_frustum_offset);
 	ClassDB::bind_method(D_METHOD("set_size", "size"), &Camera3D::set_size);
+	ClassDB::bind_method(D_METHOD("set_stretch", "stretch"), &Camera3D::set_stretch);
 	ClassDB::bind_method(D_METHOD("set_far", "far"), &Camera3D::set_far);
 	ClassDB::bind_method(D_METHOD("set_near", "near"), &Camera3D::set_near);
 	ClassDB::bind_method(D_METHOD("get_projection"), &Camera3D::get_projection);
@@ -710,6 +734,7 @@ void Camera3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "current"), "set_current", "is_current");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fov", PROPERTY_HINT_RANGE, "1,179,0.1,degrees"), "set_fov", "get_fov");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "size", PROPERTY_HINT_RANGE, "0.001,100,0.001,or_greater,suffix:m"), "set_size", "get_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "stretch", PROPERTY_HINT_RANGE, "0.001,2,0.001,or_greater,suffix:x"), "set_stretch", "get_stretch");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "frustum_offset", PROPERTY_HINT_NONE, "suffix:m"), "set_frustum_offset", "get_frustum_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "near", PROPERTY_HINT_RANGE, "0.001,10,0.001,or_greater,exp,suffix:m"), "set_near", "get_near");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "far", PROPERTY_HINT_RANGE, "0.01,4000,0.01,or_greater,exp,suffix:m"), "set_far", "get_far");
@@ -732,6 +757,10 @@ real_t Camera3D::get_fov() const {
 
 real_t Camera3D::get_size() const {
 	return size;
+}
+
+real_t Camera3D::get_stretch() const {
+	return stretch;
 }
 
 real_t Camera3D::get_near() const {
@@ -759,6 +788,12 @@ void Camera3D::set_fov(real_t p_fov) {
 void Camera3D::set_size(real_t p_size) {
 	ERR_FAIL_COND(p_size <= CMP_EPSILON);
 	size = p_size;
+	_update_camera_mode();
+}
+
+void Camera3D::set_stretch(real_t p_stretch) {
+	ERR_FAIL_COND(p_stretch <= CMP_EPSILON);
+	stretch = p_stretch;
 	_update_camera_mode();
 }
 
