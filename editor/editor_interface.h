@@ -133,6 +133,10 @@ public:
 
 	float get_editor_scale() const;
 
+	// Kind of random placement? Oh well
+	bool is_snap_enabled() const;
+	Vector3 snap_point(Vector3 p_target) const;
+
 	void popup_dialog(Window *p_dialog, const Rect2i &p_screen_rect = Rect2i());
 	void popup_dialog_centered(Window *p_dialog, const Size2i &p_minsize = Size2i());
 	void popup_dialog_centered_ratio(Window *p_dialog, float p_ratio = 0.8);

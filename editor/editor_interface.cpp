@@ -415,6 +415,14 @@ float EditorInterface::get_editor_scale() const {
 	return EDSCALE;
 }
 
+bool EditorInterface::is_snap_enabled() const {
+	return Node3DEditor::get_singleton()->is_snap_enabled();
+}
+
+Vector3 EditorInterface::snap_point(Vector3 p_target) const {
+	return Node3DEditor::get_singleton()->snap_point(p_target);
+}
+
 void EditorInterface::popup_dialog(Window *p_dialog, const Rect2i &p_screen_rect) {
 	p_dialog->popup_exclusive(EditorNode::get_singleton(), p_screen_rect);
 }
@@ -790,6 +798,8 @@ void EditorInterface::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_multi_window_enabled"), &EditorInterface::is_multi_window_enabled);
 
 	ClassDB::bind_method(D_METHOD("get_editor_scale"), &EditorInterface::get_editor_scale);
+	ClassDB::bind_method(D_METHOD("is_snap_enabled"), &EditorInterface::is_snap_enabled);
+	ClassDB::bind_method(D_METHOD("snap_point", "target"), &EditorInterface::snap_point);
 
 	ClassDB::bind_method(D_METHOD("popup_dialog", "dialog", "rect"), &EditorInterface::popup_dialog, DEFVAL(Rect2i()));
 	ClassDB::bind_method(D_METHOD("popup_dialog_centered", "dialog", "minsize"), &EditorInterface::popup_dialog_centered, DEFVAL(Size2i()));

@@ -843,10 +843,11 @@ void EditorNode3DGizmo::set_plugin(EditorNode3DGizmoPlugin *p_plugin) {
 void EditorNode3DGizmo::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_lines", "lines", "material", "billboard", "modulate"), &EditorNode3DGizmo::add_lines, DEFVAL(false), DEFVAL(Color(1, 1, 1)));
 	ClassDB::bind_method(D_METHOD("add_mesh", "mesh", "material", "transform", "skeleton"), &EditorNode3DGizmo::add_mesh, DEFVAL(Variant()), DEFVAL(Transform3D()), DEFVAL(Ref<SkinReference>()));
+	ClassDB::bind_method(D_METHOD("add_solid_box", "material", "size", "position", "xform"), &EditorNode3DGizmo::add_solid_box, DEFVAL(Vector3()), DEFVAL(Transform3D()));
 	ClassDB::bind_method(D_METHOD("add_collision_segments", "segments"), &EditorNode3DGizmo::add_collision_segments);
 	ClassDB::bind_method(D_METHOD("add_collision_triangles", "triangles"), &EditorNode3DGizmo::add_collision_triangles);
 	ClassDB::bind_method(D_METHOD("add_unscaled_billboard", "material", "default_scale", "modulate"), &EditorNode3DGizmo::add_unscaled_billboard, DEFVAL(1), DEFVAL(Color(1, 1, 1)));
-	ClassDB::bind_method(D_METHOD("add_handles", "handles", "material", "ids", "billboard", "secondary"), &EditorNode3DGizmo::add_handles, DEFVAL(false), DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("add_handles", "handles", "material", "ids", "billboard", "secondary"), &EditorNode3DGizmo::add_handles, DEFVAL(Vector<int>()), DEFVAL(false), DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("set_node_3d", "node"), &EditorNode3DGizmo::_set_node_3d);
 	ClassDB::bind_method(D_METHOD("get_node_3d"), &EditorNode3DGizmo::get_node_3d);
 	ClassDB::bind_method(D_METHOD("get_plugin"), &EditorNode3DGizmo::get_plugin);
@@ -854,6 +855,7 @@ void EditorNode3DGizmo::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hidden", "hidden"), &EditorNode3DGizmo::set_hidden);
 	ClassDB::bind_method(D_METHOD("is_subgizmo_selected", "id"), &EditorNode3DGizmo::is_subgizmo_selected);
 	ClassDB::bind_method(D_METHOD("get_subgizmo_selection"), &EditorNode3DGizmo::get_subgizmo_selection);
+	ClassDB::bind_method(D_METHOD("is_selected"), &EditorNode3DGizmo::is_selected);
 
 	GDVIRTUAL_BIND(_redraw);
 	GDVIRTUAL_BIND(_get_handle_name, "id", "secondary");

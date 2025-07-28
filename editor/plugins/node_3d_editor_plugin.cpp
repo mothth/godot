@@ -9495,7 +9495,7 @@ Size2i Node3DEditor::get_camera_viewport_size(Camera3D *p_camera) {
 	return sub_viewport->get_size();
 }
 
-Vector3 Node3DEditor::snap_point(Vector3 p_target, Vector3 p_start) const {
+Vector3 Node3DEditor::snap_point(Vector3 p_target) const {
 	if (is_snap_enabled()) {
 		real_t snap = get_translate_snap();
 		p_target.snapf(snap);

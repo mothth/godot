@@ -905,7 +905,7 @@ public:
 
 	static Size2i get_camera_viewport_size(Camera3D *p_camera);
 
-	Vector3 snap_point(Vector3 p_target, Vector3 p_start = Vector3(0, 0, 0)) const;
+	Vector3 snap_point(Vector3 p_target) const;
 
 	float get_znear() const { return settings_znear->get_value(); }
 	float get_zfar() const { return settings_zfar->get_value(); }
