@@ -153,6 +153,17 @@
 				Sets camera to use frustum projection. This mode allows adjusting the [param offset] argument to create "tilted frustum" effects.
 			</description>
 		</method>
+		<method name="camera_set_oblique_plane">
+			<return type="void" />
+			<param index="0" name="camera" type="RID" />
+			<param index="1" name="use_oblique_frustum" type="bool" />
+			<param index="2" name="oblique_normal" type="Vector3" />
+			<param index="3" name="oblique_position" type="Vector3" />
+			<param index="4" name="oblique_offset" type="float" />
+			<description>
+				Sets the camera to use oblique near plane frustum culling.
+			</description>
+		</method>
 		<method name="camera_set_orthogonal">
 			<return type="void" />
 			<param index="0" name="camera" type="RID" />
