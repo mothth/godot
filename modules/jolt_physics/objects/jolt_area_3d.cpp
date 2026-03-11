@@ -533,15 +533,21 @@ Vector3 JoltArea3D::compute_gravity(const Vector3 &p_position) const {
 	const Vector3 point = get_transform_scaled().xform(gravity_vector);
 	const Vector3 to_point = point - p_position;
 	const real_t to_point_dist_sq = MAX(to_point.length_squared(), (real_t)CMP_EPSILON);
-	const Vector3 to_point_dir = to_point / Math::sqrt(to_point_dist_sq);
+	const real_t to_point_dist = Math::sqrt(to_point_dist_sq);
+	const Vector3 to_point_dir = to_point / to_point_dist;
 
 	if (point_gravity_distance == 0.0f) {
 		return to_point_dir * gravity;
 	}
 
-	const float gravity_dist_sq = point_gravity_distance * point_gravity_distance;
-
-	return to_point_dir * (gravity * gravity_dist_sq / to_point_dist_sq);
+	if (to_point_dist >= point_gravity_distance) {
+		const float gravity_dist_sq = point_gravity_distance * point_gravity_distance;
+		return to_point_dir * (gravity * gravity_dist_sq / to_point_dist_sq);
+	}
+	else {
+		// Linear decrease of gravity as approaching center
+		return to_point_dir * (gravity * to_point_dist / point_gravity_distance);
+	}
 }
 
 void JoltArea3D::body_shape_entered(const JPH::BodyID &p_body_id, const JPH::SubShapeID &p_other_shape_id, const JPH::SubShapeID &p_self_shape_id) {

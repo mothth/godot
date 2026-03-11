@@ -320,12 +320,16 @@ void GodotArea3D::compute_gravity(const Vector3 &p_position, Vector3 &r_gravity)
 		Vector3 v = get_transform().xform(get_gravity_vector()) - p_position;
 		if (gr_unit_dist > 0) {
 			const real_t v_length_sq = v.length_squared();
-			if (v_length_sq > 0) {
-				const real_t gravity_strength = get_gravity() * gr_unit_dist * gr_unit_dist / v_length_sq;
-				r_gravity = v.normalized() * gravity_strength;
+			const real_t v_length = Math::sqrt(v_length_sq);
+			real_t gravity_strength = get_gravity();
+			if (v_length > gr_unit_dist) {
+				// Inverse square gravity
+				gravity_strength *= gr_unit_dist * gr_unit_dist / v_length_sq;
 			} else {
-				r_gravity = Vector3();
+				// Linear decrease of gravity as approaching center
+				gravity_strength *= v_length / gr_unit_dist;
 			}
+			r_gravity = v.normalized() * gravity_strength;
 		} else {
 			r_gravity = v.normalized() * get_gravity();
 		}
