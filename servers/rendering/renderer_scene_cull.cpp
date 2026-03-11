@@ -115,6 +115,14 @@ void RendererSceneCull::camera_set_frustum(RID p_camera, float p_size, Vector2 p
 	camera->zfar = p_z_far;
 }
 
+void RendererSceneCull::camera_set_adjust_clipspace(RID p_camera, bool p_adjust_clipspace, Vector3 p_offset, Vector3 p_scale) {
+	Camera *camera = camera_owner.get_or_null(p_camera);
+	ERR_FAIL_NULL(camera);
+	camera->adjust_clipspace = p_adjust_clipspace;
+	camera->clipspace_offset = p_offset;
+	camera->clipspace_scale = p_scale;
+}
+
 void RendererSceneCull::camera_set_transform(RID p_camera, const Transform3D &p_transform) {
 	Camera *camera = camera_owner.get_or_null(p_camera);
 	ERR_FAIL_NULL(camera);
@@ -2677,9 +2685,19 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 			} break;
 		}
 
+
 		shadow_projection = projection;
+		if (camera->adjust_clipspace) {
+			Projection xform = Transform3D(Basis::from_scale(camera->clipspace_scale), camera->clipspace_offset);
+			shadow_projection = xform * shadow_projection;
+		}
+
 		if (camera->use_oblique_frustum) {
+			Projection xform = Transform3D(Basis::from_scale(camera->clipspace_scale), camera->clipspace_offset);
 			projection.apply_oblique_plane(get_camera_oblique_plane(p_camera));
+			projection = xform * projection;
+		} else if (camera->adjust_clipspace) {
+			projection = shadow_projection;
 		}
 
 		camera_data.set_camera(transform, projection, shadow_projection, is_orthogonal, is_frustum, vaspect, jitter, taa_frame_count, camera->visible_layers);

@@ -76,9 +76,12 @@ private:
 	KeepAspect keep_aspect = KEEP_HEIGHT;
 
 	bool use_oblique_frustum = false;
+	bool adjust_clipspace = false;
 	Vector3 oblique_normal = Vector3(0, 1, 0);
 	Vector3 oblique_position = Vector3();
 	real_t oblique_offset = 0;
+	Vector3 clipspace_offset = Vector3();
+	Vector3 clipspace_scale = Vector3(1, 1, 1);
 
 	RID camera;
 	RID scenario_id;
@@ -156,9 +159,12 @@ public:
 
 	real_t get_fov() const;
 	bool get_use_oblique_frustum() const;
+	bool get_adjust_clipspace() const;
 	Vector3 get_oblique_normal() const;
 	Vector3 get_oblique_position() const;
 	real_t get_oblique_offset() const;
+	Vector3 get_clipspace_scale() const;
+	Vector3 get_clipspace_offset() const;
 	real_t get_size() const;
 	real_t get_far() const;
 	real_t get_near() const;
@@ -168,10 +174,13 @@ public:
 
 	void set_fov(real_t p_fov);
 	void set_use_oblique_frustum(bool P_use_oblique_frustum);
+	void set_adjust_clipspace(bool p_adjust_clipspace);
 	void set_oblique_normal(Vector3 p_oblique_normal);
 	void set_oblique_position(Vector3 p_oblique_position);
 	void set_oblique_offset(real_t p_oblique_offset);
 	void set_oblique_plane_from_transform(Transform3D p_oblique_plane_transform);
+	void set_clipspace_scale(Vector3 p_scale);
+	void set_clipspace_offset(Vector3 p_offset);
 	void set_size(real_t p_size);
 	void set_far(real_t p_far);
 	void set_near(real_t p_near);

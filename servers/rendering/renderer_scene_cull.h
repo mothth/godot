@@ -80,11 +80,14 @@ public:
 		Type type;
 		float fov;
 		bool use_oblique_frustum;
+		bool adjust_clipspace;
 		Vector3 oblique_normal;
 		Vector3 oblique_position;
 		float oblique_offset;
 		float znear, zfar;
 		float size;
+		Vector3 clipspace_offset;
+		Vector3 clipspace_scale;
 		Vector2 offset;
 		uint32_t visible_layers;
 		bool vaspect;
@@ -116,6 +119,7 @@ public:
 	virtual void camera_set_oblique_plane(RID p_camera, bool p_use_oblique_frustum, const Vector3 &p_ob_normal, const Vector3 &p_ob_position, float p_ob_offset);
 	virtual void camera_set_orthogonal(RID p_camera, float p_size, float p_z_near, float p_z_far);
 	virtual void camera_set_frustum(RID p_camera, float p_size, Vector2 p_offset, float p_z_near, float p_z_far);
+	virtual void camera_set_adjust_clipspace(RID p_camera, bool p_adjust_clipspace, Vector3 p_offset, Vector3 p_scale);
 	virtual void camera_set_transform(RID p_camera, const Transform3D &p_transform);
 	virtual void camera_set_cull_mask(RID p_camera, uint32_t p_layers);
 	virtual void camera_set_environment(RID p_camera, RID p_env);

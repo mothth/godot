@@ -184,6 +184,16 @@
 				Sets camera to use perspective projection. Objects on the screen becomes smaller when they are far away.
 			</description>
 		</method>
+		<method name="camera_set_adjust_clipspace">
+			<return type="void" />
+			<param index="0" name="camera" type="RID" />
+			<param index="1" name="adjust_clipspace" type="bool" />
+			<param index="2" name="offset" type="Vector3" />
+			<param index="3" name="scale" type="Vector3" />
+			<description>
+				Adjusts the clipspace region.
+			</description>
+		</method>
 		<method name="camera_set_transform">
 			<return type="void" />
 			<param index="0" name="camera" type="RID" />

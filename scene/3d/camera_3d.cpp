@@ -138,6 +138,10 @@ void Camera3D::_validate_property(PropertyInfo &p_property) const {
 			if (use_oblique_frustum == false) {
 				p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 			}
+		} else if (p_property.name == "clipspace_offset" || p_property.name == "clipspace_scale") {
+			if (adjust_clipspace == false) {
+				p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+			}
 		}
 	}
 
@@ -322,6 +326,7 @@ void Camera3D::set_perspective(real_t p_fovy_degrees, real_t p_z_near, real_t p_
 
 	RenderingServer::get_singleton()->camera_set_perspective(camera, fov, _near, _far);
 	RenderingServer::get_singleton()->camera_set_oblique_plane(camera, use_oblique_frustum, oblique_normal, oblique_position, oblique_offset);
+	RenderingServer::get_singleton()->camera_set_adjust_clipspace(camera, adjust_clipspace, clipspace_offset, clipspace_scale);
 	update_gizmos();
 	force_change = false;
 }
@@ -340,6 +345,7 @@ void Camera3D::set_orthogonal(real_t p_size, real_t p_z_near, real_t p_z_far) {
 
 	RenderingServer::get_singleton()->camera_set_orthogonal(camera, size, _near, _far);
 	RenderingServer::get_singleton()->camera_set_oblique_plane(camera, use_oblique_frustum, oblique_normal, oblique_position, oblique_offset);
+	RenderingServer::get_singleton()->camera_set_adjust_clipspace(camera, adjust_clipspace, clipspace_offset, clipspace_scale);
 	update_gizmos();
 }
 
@@ -357,6 +363,7 @@ void Camera3D::set_frustum(real_t p_size, Vector2 p_offset, real_t p_z_near, rea
 	force_change = false;
 
 	RenderingServer::get_singleton()->camera_set_frustum(camera, size, frustum_offset, _near, _far);
+	RenderingServer::get_singleton()->camera_set_adjust_clipspace(camera, adjust_clipspace, clipspace_offset, clipspace_scale);
 	update_gizmos();
 }
 
@@ -654,20 +661,26 @@ void Camera3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_camera_projection"), &Camera3D::get_camera_projection);
 	ClassDB::bind_method(D_METHOD("get_fov"), &Camera3D::get_fov);
 	ClassDB::bind_method(D_METHOD("get_use_oblique_frustum"), &Camera3D::get_use_oblique_frustum);
+	ClassDB::bind_method(D_METHOD("get_adjust_clipspace"), &Camera3D::get_adjust_clipspace);
 	ClassDB::bind_method(D_METHOD("get_oblique_normal"), &Camera3D::get_oblique_normal);
 	ClassDB::bind_method(D_METHOD("get_oblique_position"), &Camera3D::get_oblique_position);
 	ClassDB::bind_method(D_METHOD("get_oblique_offset"), &Camera3D::get_oblique_offset);
 	ClassDB::bind_method(D_METHOD("get_frustum_offset"), &Camera3D::get_frustum_offset);
+	ClassDB::bind_method(D_METHOD("get_clipspace_scale"), &Camera3D::get_clipspace_scale);
+	ClassDB::bind_method(D_METHOD("get_clipspace_offset"), &Camera3D::get_clipspace_offset);
 	ClassDB::bind_method(D_METHOD("get_size"), &Camera3D::get_size);
 	ClassDB::bind_method(D_METHOD("get_far"), &Camera3D::get_far);
 	ClassDB::bind_method(D_METHOD("get_near"), &Camera3D::get_near);
 	ClassDB::bind_method(D_METHOD("set_fov", "fov"), &Camera3D::set_fov);
 	ClassDB::bind_method(D_METHOD("set_use_oblique_frustum", "use_oblique_normal"), &Camera3D::set_use_oblique_frustum);
+	ClassDB::bind_method(D_METHOD("set_adjust_clipspace", "use_adjust_clipspace"), &Camera3D::set_adjust_clipspace);
 	ClassDB::bind_method(D_METHOD("set_oblique_normal", "oblique_normal"), &Camera3D::set_oblique_normal);
 	ClassDB::bind_method(D_METHOD("set_oblique_position", "oblique_position"), &Camera3D::set_oblique_position);
 	ClassDB::bind_method(D_METHOD("set_oblique_plane_from_transform", "oblique_transform"), &Camera3D::set_oblique_plane_from_transform);
 	ClassDB::bind_method(D_METHOD("set_oblique_offset", "oblique_offset"), &Camera3D::set_oblique_offset);
 	ClassDB::bind_method(D_METHOD("set_frustum_offset", "offset"), &Camera3D::set_frustum_offset);
+	ClassDB::bind_method(D_METHOD("set_clipspace_scale", "scale"), &Camera3D::set_clipspace_scale);
+	ClassDB::bind_method(D_METHOD("set_clipspace_offset", "offset"), &Camera3D::set_clipspace_offset);
 	ClassDB::bind_method(D_METHOD("set_size", "size"), &Camera3D::set_size);
 	ClassDB::bind_method(D_METHOD("set_far", "far"), &Camera3D::set_far);
 	ClassDB::bind_method(D_METHOD("set_near", "near"), &Camera3D::set_near);
@@ -717,9 +730,12 @@ void Camera3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "near", PROPERTY_HINT_RANGE, "0.001,10,0.001,or_greater,exp,suffix:m"), "set_near", "get_near");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "far", PROPERTY_HINT_RANGE, "0.01,4000,0.01,or_greater,exp,suffix:m"), "set_far", "get_far");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_oblique_frustum"), "set_use_oblique_frustum", "get_use_oblique_frustum");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "adjust_clipspace"), "set_adjust_clipspace", "get_adjust_clipspace");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "oblique_normal"), "set_oblique_normal", "get_oblique_normal");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "oblique_position"), "set_oblique_position", "get_oblique_position");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "oblique_offset"), "set_oblique_offset", "get_oblique_offset");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "clipspace_scale"), "set_clipspace_scale", "get_clipspace_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "clipspace_offset"), "set_clipspace_offset", "get_clipspace_offset");
 
 	BIND_ENUM_CONSTANT(PROJECTION_PERSPECTIVE);
 	BIND_ENUM_CONSTANT(PROJECTION_ORTHOGONAL);
@@ -741,6 +757,10 @@ bool Camera3D::get_use_oblique_frustum() const {
 	return use_oblique_frustum;
 }
 
+bool Camera3D::get_adjust_clipspace() const {
+	return adjust_clipspace;
+}
+
 Vector3 Camera3D::get_oblique_normal() const {
 	return oblique_normal;
 }
@@ -751,6 +771,14 @@ Vector3 Camera3D::get_oblique_position() const {
 
 real_t Camera3D::get_oblique_offset() const {
 	return oblique_offset;
+}
+
+Vector3 Camera3D::get_clipspace_scale() const {
+	return clipspace_scale;
+}
+
+Vector3 Camera3D::get_clipspace_offset() const {
+	return clipspace_offset;
 }
 
 real_t Camera3D::get_size() const {
@@ -785,6 +813,14 @@ void Camera3D::set_use_oblique_frustum(bool p_use_oblique_frustum) {
 	notify_property_list_changed();
 }
 
+void Camera3D::set_adjust_clipspace(bool p_adjust_clipspace) {
+	if (adjust_clipspace != p_adjust_clipspace) {
+		adjust_clipspace = p_adjust_clipspace;
+		_update_camera_mode();
+		notify_property_list_changed();
+	}
+}
+
 void Camera3D::set_oblique_normal(Vector3 p_oblique_normal) {
 	oblique_normal = p_oblique_normal;
 	_update_camera_mode();
@@ -803,6 +839,16 @@ void Camera3D::set_oblique_offset(real_t p_oblique_offset) {
 void Camera3D::set_oblique_plane_from_transform(Transform3D p_oblique_transform) {
 	oblique_normal = -p_oblique_transform.basis.get_column(2);
 	oblique_position = p_oblique_transform.origin;
+	_update_camera_mode();
+}
+
+void Camera3D::set_clipspace_scale(Vector3 p_scale) {
+	clipspace_scale = p_scale;
+	_update_camera_mode();
+}
+
+void Camera3D::set_clipspace_offset(Vector3 p_offset) {
+	clipspace_offset = p_offset;
 	_update_camera_mode();
 }
 
