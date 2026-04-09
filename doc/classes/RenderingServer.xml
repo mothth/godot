@@ -4267,6 +4267,22 @@
 				Sets the viewport's width and height in pixels.
 			</description>
 		</method>
+		<method name="viewport_set_render_target_owner">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="owner" type="RID" />
+			<description>
+				Set a viewport for this viewport to use the render target of.
+			</description>
+		</method>
+		<method name="viewport_set_priority">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="priority" type="int" />
+			<description>
+				Set the priority for the viewport's rendering order.
+			</description>
+		</method>
 		<method name="viewport_set_snap_2d_transforms_to_pixel">
 			<return type="void" />
 			<param index="0" name="viewport" type="RID" />
@@ -5458,6 +5474,9 @@
 		</constant>
 		<constant name="COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_TRANSPARENT" value="4" enum="CompositorEffectCallbackType">
 			The callback is called after our transparent rendering pass, but before any built-in post-processing effects and output to our render target.
+		</constant>
+		<constant name="COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_POST_PROCESS" value="5" enum="CompositorEffectCallbackType">
+			The callback is called after all built-in post-processing effects.
 		</constant>
 		<constant name="COMPOSITOR_EFFECT_CALLBACK_TYPE_ANY" value="-1" enum="CompositorEffectCallbackType">
 		</constant>

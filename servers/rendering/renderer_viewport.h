@@ -51,6 +51,7 @@ public:
 		Size2i internal_size;
 		Size2i size;
 		uint32_t view_count;
+		int priority;
 		RID camera;
 		RID scenario;
 
@@ -64,6 +65,8 @@ public:
 		RS::ViewportUpdateMode update_mode = RenderingServer::VIEWPORT_UPDATE_WHEN_VISIBLE;
 		RID render_target;
 		RID render_target_texture;
+		RID render_target_owner; 				// If set, `render_target` is from the specified viewport rather than locally owned
+		LocalVector<RID> render_target_users; 	// List of viewports that use the render target from this viewport
 		Ref<RenderSceneBuffers> render_buffers;
 
 		RS::ViewportMSAA msaa_2d = RenderingServer::VIEWPORT_MSAA_DISABLED;
@@ -146,6 +149,12 @@ public:
 			int sublayer;
 		};
 
+		struct SortViewports {
+			bool operator()(const Viewport *p_left, const Viewport *p_right) const {
+				return p_left->priority < p_right->priority;
+			}
+		};
+
 		Transform2D global_transform;
 
 		HashMap<RID, CanvasData> canvas_map;
@@ -154,6 +163,7 @@ public:
 
 		Viewport() {
 			view_count = 1;
+			priority = 0;
 			update_mode = RS::VIEWPORT_UPDATE_WHEN_VISIBLE;
 			clear_mode = RS::VIEWPORT_CLEAR_ALWAYS;
 			transparent_bg = false;
@@ -202,6 +212,8 @@ public:
 private:
 	Vector<Viewport *> _sort_active_viewports();
 	void _viewport_set_size(Viewport *p_viewport, int p_width, int p_height, uint32_t p_view_count);
+	void _viewport_set_render_target(Viewport *p_viewport, RID p_render_target);
+	void _viewport_update_from_owner(Viewport *p_viewport, Viewport *p_owner);
 	bool _viewport_requires_motion_vectors(Viewport *p_viewport);
 	void _viewport_set_force_motion_vectors(Viewport *p_viewport, bool p_force_motion_vectors);
 	void _configure_3d_render_buffers(Viewport *p_viewport);
@@ -221,6 +233,8 @@ public:
 #endif // XR_DISABLED
 
 	void viewport_set_size(RID p_viewport, int p_width, int p_height);
+	void viewport_set_render_target_owner(RID p_viewport, RID p_owner);
+	void viewport_set_priority(RID p_viewport, int p_priority);
 
 	void viewport_attach_to_screen(RID p_viewport, const Rect2 &p_rect = Rect2(), DisplayServer::WindowID p_screen = DisplayServer::MAIN_WINDOW_ID);
 	void viewport_set_render_direct_to_screen(RID p_viewport, bool p_enable);

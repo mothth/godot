@@ -43,6 +43,8 @@
 #include "servers/xr/xr_interface.h"
 #endif // XR_DISABLED
 
+#define ERR_FAIL_RENDER_TARGET_OWNER ERR_FAIL_COND_MSG(viewport->render_target_owner.is_valid(), "Render target configuration is forbidden when using an external render target.")
+
 static Transform2D _canvas_get_transform(RendererViewport::Viewport *p_viewport, RendererCanvasCull::Canvas *p_canvas, RendererViewport::Viewport::CanvasData *p_canvas_data, const Vector2 &p_vp_size) {
 	Transform2D xf = p_viewport->global_transform;
 
@@ -93,6 +95,7 @@ Vector<RendererViewport::Viewport *> RendererViewport::_sort_active_viewports() 
 	// parents last. We also need to keep sibling viewports in the original order
 	// from top to bottom.
 
+	active_viewports.sort_custom<RendererViewport::Viewport::SortViewports>();
 	Vector<Viewport *> result;
 	List<Viewport *> nodes;
 
@@ -284,6 +287,13 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			rb_config.set_use_debanding(p_viewport->use_debanding);
 
 			p_viewport->render_buffers->configure(&rb_config);
+		}
+		
+		for (RID &user_rid : p_viewport->render_target_users) {
+			Viewport *user = viewport_owner.get_or_null(user_rid);
+			if (user) {
+				_viewport_update_from_owner(user, p_viewport);
+			}
 		}
 	}
 }
@@ -957,7 +967,9 @@ void RendererViewport::viewport_initialize(RID p_rid) {
 	viewport_owner.initialize_rid(p_rid);
 	Viewport *viewport = viewport_owner.get_or_null(p_rid);
 	viewport->self = p_rid;
-	viewport->render_target = RSG::texture_storage->render_target_create();
+	if (!viewport->render_target_owner.is_valid()) {
+		viewport->render_target = RSG::texture_storage->render_target_create();
+	}
 	viewport->shadow_atlas = RSG::light_storage->shadow_atlas_create();
 	viewport->viewport_render_direct_to_screen = false;
 
@@ -1065,8 +1077,64 @@ void RendererViewport::viewport_set_size(RID p_viewport, int p_width, int p_heig
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
 	ERR_FAIL_COND_MSG(viewport->use_xr, "Cannot set viewport size when using XR");
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	_viewport_set_size(viewport, p_width, p_height, 1);
+}
+
+void RendererViewport::viewport_set_render_target_owner(RID p_viewport, RID p_owner) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	Viewport *owner = viewport_owner.get_or_null(p_owner);
+	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_NULL(owner);
+	ERR_FAIL_COND_MSG(owner->use_xr, "Cannot use the render target of an XR viewport.");
+
+	// Free old render target if we had one
+	if (!viewport->render_target_owner.is_valid()) {
+		RSG::texture_storage->render_target_free(viewport->render_target);
+	}
+	else {
+		// Remove us from old parent user list
+		Viewport *old_parent = viewport_owner.get_or_null(viewport->render_target_owner);
+		if (old_parent) {
+			old_parent->render_target_users.erase(p_viewport);
+		}
+	}
+
+	_viewport_set_render_target(viewport, owner->render_target);
+	viewport->render_target_owner = p_owner;
+	owner->render_target_users.push_back(p_viewport);
+	_viewport_update_from_owner(viewport, owner);
+}
+
+void RendererViewport::viewport_set_priority(RID p_viewport, int p_priority) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+	if (viewport->priority != p_priority) {
+		viewport->priority = p_priority;
+		sorted_active_viewports_dirty = true;
+	}
+}
+
+void RendererViewport::_viewport_set_render_target(Viewport *p_viewport, RID p_render_target) {
+	p_viewport->render_target = p_render_target;
+	for (RID &user_rid : p_viewport->render_target_users) {
+		Viewport *user = viewport_owner.get_or_null(user_rid);
+		if (user) {
+			_viewport_set_render_target(user, p_viewport->render_target);
+		}
+	}
+}
+
+void RendererViewport::_viewport_update_from_owner(Viewport *p_viewport, Viewport *p_owner) {
+	p_viewport->size = p_owner->size;
+	p_viewport->msaa_2d = p_owner->msaa_2d;
+	p_viewport->use_taa = p_owner->use_taa;
+	p_viewport->use_debanding = p_owner->use_debanding;
+	p_viewport->viewport_render_direct_to_screen = false;
+	p_viewport->use_xr = false;
+	p_viewport->view_count = 1;
+	_configure_3d_render_buffers(p_viewport);
 }
 
 void RendererViewport::_viewport_set_size(Viewport *p_viewport, int p_width, int p_height, uint32_t p_view_count) {
@@ -1146,6 +1214,7 @@ void RendererViewport::viewport_attach_to_screen(RID p_viewport, const Rect2 &p_
 void RendererViewport::viewport_set_render_direct_to_screen(RID p_viewport, bool p_enable) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	if (p_enable == viewport->viewport_render_direct_to_screen) {
 		return;
@@ -1310,6 +1379,7 @@ void RendererViewport::viewport_set_canvas_transform(RID p_viewport, RID p_canva
 void RendererViewport::viewport_set_transparent_background(RID p_viewport, bool p_enabled) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 	if (viewport->transparent_bg == p_enabled) {
 		return;
 	}
@@ -1354,6 +1424,7 @@ void RendererViewport::viewport_set_positional_shadow_atlas_quadrant_subdivision
 void RendererViewport::viewport_set_msaa_2d(RID p_viewport, RS::ViewportMSAA p_msaa) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	if (viewport->msaa_2d == p_msaa) {
 		return;
@@ -1376,6 +1447,7 @@ void RendererViewport::viewport_set_msaa_3d(RID p_viewport, RS::ViewportMSAA p_m
 void RendererViewport::viewport_set_use_hdr_2d(RID p_viewport, bool p_use_hdr_2d) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	if (viewport->use_hdr_2d == p_use_hdr_2d) {
 		return;
@@ -1435,6 +1507,7 @@ void RendererViewport::viewport_set_use_taa(RID p_viewport, bool p_use_taa) {
 void RendererViewport::viewport_set_use_debanding(RID p_viewport, bool p_use_debanding) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	if (viewport->use_debanding == p_use_debanding) {
 		return;
@@ -1585,6 +1658,7 @@ void RendererViewport::viewport_set_default_canvas_item_texture_repeat(RID p_vie
 void RendererViewport::viewport_set_sdf_oversize_and_scale(RID p_viewport, RS::ViewportSDFOversize p_size, RS::ViewportSDFScale p_scale) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	RSG::texture_storage->render_target_set_sdf_size_and_scale(viewport->render_target, p_size, p_scale);
 }
@@ -1606,6 +1680,7 @@ RID RendererViewport::viewport_find_from_screen_attachment(DisplayServer::Window
 void RendererViewport::viewport_set_vrs_mode(RID p_viewport, RS::ViewportVRSMode p_mode) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	RSG::texture_storage->render_target_set_vrs_mode(viewport->render_target, p_mode);
 	_configure_3d_render_buffers(viewport);
@@ -1621,6 +1696,7 @@ void RendererViewport::viewport_set_vrs_update_mode(RID p_viewport, RS::Viewport
 void RendererViewport::viewport_set_vrs_texture(RID p_viewport, RID p_texture) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_RENDER_TARGET_OWNER;
 
 	RSG::texture_storage->render_target_set_vrs_texture(viewport->render_target, p_texture);
 	_configure_3d_render_buffers(viewport);
@@ -1630,7 +1706,16 @@ bool RendererViewport::free(RID p_rid) {
 	if (viewport_owner.owns(p_rid)) {
 		Viewport *viewport = viewport_owner.get_or_null(p_rid);
 
-		RSG::texture_storage->render_target_free(viewport->render_target);
+		if (!viewport->render_target_owner.is_valid()) {
+			RSG::texture_storage->render_target_free(viewport->render_target);
+			for (RID &user_rid : viewport->render_target_users) {
+				Viewport *user = viewport_owner.get_or_null(user_rid);
+				if (user) {
+					user->render_target_owner = RID();
+					_viewport_set_render_target(user, RID());
+				}
+			}
+		}
 		RSG::light_storage->shadow_atlas_free(viewport->shadow_atlas);
 		if (viewport->render_buffers.is_valid()) {
 			viewport->render_buffers.unref();

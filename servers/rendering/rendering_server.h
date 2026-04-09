@@ -988,6 +988,8 @@ public:
 #endif // !XR_DISABLED
 
 	virtual void viewport_set_size(RID p_viewport, int p_width, int p_height) = 0;
+	virtual void viewport_set_render_target_owner(RID p_viewport, RID p_owner) = 0;
+	virtual void viewport_set_priority(RID p_viewport, int p_priority) = 0;
 	virtual void viewport_set_active(RID p_viewport, bool p_active) = 0;
 	virtual void viewport_set_parent_viewport(RID p_viewport, RID p_parent_viewport) = 0;
 	virtual void viewport_set_canvas_cull_mask(RID p_viewport, uint32_t p_canvas_cull_mask) = 0;
@@ -1213,6 +1215,7 @@ public:
 		COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_SKY,
 		COMPOSITOR_EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT,
 		COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_TRANSPARENT,
+		COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_POST_PROCESS,
 		COMPOSITOR_EFFECT_CALLBACK_TYPE_MAX,
 		COMPOSITOR_EFFECT_CALLBACK_TYPE_ANY = -1,
 	};
