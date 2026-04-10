@@ -114,6 +114,12 @@
 				Returns the render target associated with this buffers object.
 			</description>
 		</method>
+		<method name="get_framebuffer">
+			<return type="RID" />
+			<description>
+				Returns the framebuffer associated with the render target in this buffers object.
+			</description>
+		</method>
 		<method name="get_scaling_3d_mode" qualifiers="const">
 			<return type="int" enum="RenderingServer.ViewportScaling3DMode" />
 			<description>

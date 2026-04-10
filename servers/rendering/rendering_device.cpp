@@ -41,6 +41,7 @@
 #include "core/templates/fixed_vector.h"
 #include "modules/modules_enabled.gen.h"
 #include "servers/rendering/rendering_shader_container.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h" // for render_target_get_texture, temporary solution?
 
 #ifdef MODULE_GLSLANG_ENABLED
 #include "modules/glslang/shader_compile.h"
@@ -7681,6 +7682,8 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("texture_get_native_handle", "texture"), &RenderingDevice::texture_get_native_handle);
 #endif
 
+	ClassDB::bind_method(D_METHOD("render_target_get_texture", "render_target"), &RenderingDevice::_render_target_get_texture);
+
 	ClassDB::bind_method(D_METHOD("framebuffer_format_create", "attachments", "view_count"), &RenderingDevice::_framebuffer_format_create, DEFVAL(1));
 	ClassDB::bind_method(D_METHOD("framebuffer_format_create_multipass", "attachments", "passes", "view_count"), &RenderingDevice::_framebuffer_format_create_multipass, DEFVAL(1));
 	ClassDB::bind_method(D_METHOD("framebuffer_format_create_empty", "samples"), &RenderingDevice::framebuffer_format_create_empty, DEFVAL(TEXTURE_SAMPLES_1));
@@ -8701,6 +8704,11 @@ RID RenderingDevice::_render_pipeline_create(RID p_shader, FramebufferFormatID p
 
 RID RenderingDevice::_compute_pipeline_create(RID p_shader, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants = TypedArray<RDPipelineSpecializationConstant>()) {
 	return compute_pipeline_create(p_shader, _get_spec_constants(p_specialization_constants));
+}
+
+RID RenderingDevice::_render_target_get_texture(RID p_render_target) {
+	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+	return texture_storage->render_target_get_rd_texture(p_render_target);
 }
 
 #ifndef DISABLE_DEPRECATED

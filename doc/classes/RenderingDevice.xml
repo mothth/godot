@@ -1089,6 +1089,13 @@
 				[b]Note:[/b] The existing [param texture] requires the [constant TEXTURE_USAGE_CAN_UPDATE_BIT] to be updatable.
 			</description>
 		</method>
+		<method name="render_target_get_texture">
+			<return type="RID" />
+			<param index="0" name="render_target" type="RID" />
+			<description>
+				Returns the texture associated with a render target.
+			</description>
+		</method>
 		<method name="uniform_buffer_create">
 			<return type="RID" />
 			<param index="0" name="size_bytes" type="int" />

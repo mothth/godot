@@ -66,6 +66,7 @@ void RenderSceneBuffersRD::_bind_methods() {
 
 	// Expose a few properties we're likely to use externally
 	ClassDB::bind_method(D_METHOD("get_render_target"), &RenderSceneBuffersRD::get_render_target);
+	ClassDB::bind_method(D_METHOD("get_framebuffer"), &RenderSceneBuffersRD::get_framebuffer);
 	ClassDB::bind_method(D_METHOD("get_view_count"), &RenderSceneBuffersRD::get_view_count);
 	ClassDB::bind_method(D_METHOD("get_internal_size"), &RenderSceneBuffersRD::get_internal_size);
 	ClassDB::bind_method(D_METHOD("get_target_size"), &RenderSceneBuffersRD::get_target_size);
@@ -712,6 +713,12 @@ RID RenderSceneBuffersRD::get_velocity_depth_buffer() {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 	RID velocity_depth = texture_storage->render_target_get_override_velocity_depth(render_target);
 	return velocity_depth;
+}
+
+RID RenderSceneBuffersRD::get_framebuffer() {
+	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+	RID framebuffer = texture_storage->render_target_get_rd_framebuffer(render_target);
+	return framebuffer;
 }
 
 uint32_t RenderSceneBuffersRD::get_color_usage_bits(bool p_resolve, bool p_msaa, bool p_storage) {

@@ -92,7 +92,7 @@
 		<constant name="EFFECT_CALLBACK_TYPE_POST_POST_PROCESS" value="5" enum="EffectCallbackType">
 			The callback is called after all built-in post-processing effects.
 		</constant>
-		<constant name="EFFECT_CALLBACK_TYPE_MAX" value="5" enum="EffectCallbackType">
+		<constant name="EFFECT_CALLBACK_TYPE_MAX" value="6" enum="EffectCallbackType">
 			Represents the size of the [enum EffectCallbackType] enum.
 		</constant>
 	</constants>

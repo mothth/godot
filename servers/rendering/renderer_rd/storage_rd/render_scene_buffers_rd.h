@@ -316,6 +316,8 @@ public:
 
 	RID get_velocity_depth_buffer();
 
+	RID get_framebuffer();
+
 	// Samplers adjusted with the mipmap bias that is best fit for the configuration of these render buffers.
 
 	_FORCE_INLINE_ RendererRD::MaterialStorage::Samplers get_samplers() const {

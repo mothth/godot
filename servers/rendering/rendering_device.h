@@ -1780,6 +1780,8 @@ private:
 
 	void _draw_list_set_push_constant(DrawListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
 	void _compute_list_set_push_constant(ComputeListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
+
+	RID _render_target_get_texture(RID p_render_target);
 };
 
 VARIANT_ENUM_CAST(RenderingDevice::DeviceType)
