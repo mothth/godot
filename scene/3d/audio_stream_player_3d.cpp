@@ -364,7 +364,7 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 		frame = AudioFrame(0, 0);
 	}
 
-	if (!internal->active.is_set() || internal->stream.is_null()) {
+	if (!internal->active.is_set() || internal->stream.is_null() || !get_viewport()) {
 		return output_volume_vector;
 	}
 
@@ -380,23 +380,38 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 	Ref<World3D> world_3d = get_world_3d();
 	ERR_FAIL_COND_V(world_3d.is_null(), output_volume_vector);
 
-	HashSet<Camera3D *> cameras = world_3d->get_cameras();
-	cameras.insert(get_viewport()->get_camera_3d());
+	// HashSet<Camera3D *> cameras = world_3d->get_cameras();
+	// cameras.insert(get_viewport()->get_camera_3d());
+	Camera3D *camera = get_viewport()->get_camera_3d();
+	Viewport *vp = get_viewport();
+
+	if (!vp->is_audio_listener_3d()) {
+		// Viewport shouldn't be emitting any sound in 3D, so mute it
+		if (!was_disabled_last_frame) {
+			HashMap<StringName, Vector<AudioFrame>> bus_volumes;
+			for (Ref<AudioStreamPlayback> &playback : internal->stream_playbacks) {
+				AudioServer::get_singleton()->set_playback_bus_volumes_linear(playback, bus_volumes);
+			}
+			was_disabled_last_frame = true; // Cache so we don't set the volume over and over.
+		}
+		return output_volume_vector;
+	}
 
 #ifndef PHYSICS_3D_DISABLED
 	PhysicsDirectSpaceState3D *space_state = PhysicsServer3D::get_singleton()->space_get_direct_state(world_3d->get_space());
 #endif // PHYSICS_3D_DISABLED
 
-	for (Camera3D *camera : cameras) {
-		if (!camera) {
-			continue;
-		}
-		Viewport *vp = camera->get_viewport();
-		if (!vp) {
-			continue;
-		}
+	// for (Camera3D *camera : cameras) {
+	// 	if (!camera) {
+	// 		continue;
+	// 	}
+	// 	Viewport *vp = camera->get_viewport();
+	// 	if (!vp) {
+	// 		continue;
+	// 	}
 		if (!vp->is_audio_listener_3d()) {
-			continue;
+			// continue;
+			return output_volume_vector;
 		}
 
 		Node3D *listener_node = camera;
@@ -430,18 +445,19 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 			}
 #endif // PHYSICS_3D_DISABLED
 			if (dist > total_max || total_max > max_distance) {
-				if (!was_further_than_max_distance_last_frame) {
+				if (!was_disabled_last_frame) {
 					HashMap<StringName, Vector<AudioFrame>> bus_volumes;
 					for (Ref<AudioStreamPlayback> &playback : internal->stream_playbacks) {
 						// So the player gets muted and mostly stops mixing when out of range.
 						AudioServer::get_singleton()->set_playback_bus_volumes_linear(playback, bus_volumes);
 					}
-					was_further_than_max_distance_last_frame = true; // Cache so we don't set the volume over and over.
+					was_disabled_last_frame = true; // Cache so we don't set the volume over and over.
 				}
-				continue; //can't hear this sound in this listener
+				// continue; //can't hear this sound in this listener
+				return output_volume_vector;
 			}
 		}
-		was_further_than_max_distance_last_frame = false;
+		was_disabled_last_frame = false;
 
 		float multiplier = Math::db_to_linear(_get_attenuation_db(dist));
 		if (max_distance > 0) {
@@ -541,7 +557,7 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 				}
 			}
 		}
-	}
+	// }
 	return output_volume_vector;
 }
 

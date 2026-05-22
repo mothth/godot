@@ -34,6 +34,7 @@
 #include "scene/3d/camera_3d.h"
 #include "scene/resources/camera_attributes.h"
 #include "scene/resources/environment.h"
+#include "scene/main/sub_world.h"
 #ifndef NAVIGATION_3D_DISABLED
 #include "servers/navigation_3d/navigation_server_3d.h"
 #endif // NAVIGATION_3D_DISABLED
@@ -44,6 +45,26 @@ void World3D::_register_camera(Camera3D *p_camera) {
 
 void World3D::_remove_camera(Camera3D *p_camera) {
 	cameras.erase(p_camera);
+}
+
+void World3D::_register_viewport(Viewport *p_viewport) {
+	viewports.insert(p_viewport);
+	// Notify SubWorlds of this
+	for (auto sub_world : sub_worlds) {
+		sub_world->_new_available_viewport(p_viewport);
+	}
+}
+
+void World3D::_remove_viewport(Viewport *p_viewport) {
+	viewports.erase(p_viewport);
+}
+
+void World3D::_register_sub_world(SubWorld *p_sub_world) {
+	sub_worlds.insert(p_sub_world);
+}
+
+void World3D::_remove_sub_world(SubWorld *p_sub_world) {
+	sub_worlds.erase(p_sub_world);
 }
 
 RID World3D::get_space() const {

@@ -5068,26 +5068,28 @@ void Tree::_notification(int p_what) {
 				}
 			}
 
-			Point2 mouse_position = get_viewport()->get_mouse_position() - get_global_position();
-			if (scrolling && get_rect().grow(theme_cache.scroll_border).has_point(mouse_position)) {
-				Point2 point;
+			if (get_viewport()) {
+				Point2 mouse_position = get_viewport()->get_mouse_position() - get_global_position();
+				if (scrolling && get_rect().grow(theme_cache.scroll_border).has_point(mouse_position)) {
+					Point2 point;
 
-				if ((Math::abs(mouse_position.x) < Math::abs(mouse_position.x - get_size().width)) && (Math::abs(mouse_position.x) < theme_cache.scroll_border)) {
-					point.x = mouse_position.x - theme_cache.scroll_border;
-				} else if (Math::abs(mouse_position.x - get_size().width) < theme_cache.scroll_border) {
-					point.x = mouse_position.x - (get_size().width - theme_cache.scroll_border);
+					if ((Math::abs(mouse_position.x) < Math::abs(mouse_position.x - get_size().width)) && (Math::abs(mouse_position.x) < theme_cache.scroll_border)) {
+						point.x = mouse_position.x - theme_cache.scroll_border;
+					} else if (Math::abs(mouse_position.x - get_size().width) < theme_cache.scroll_border) {
+						point.x = mouse_position.x - (get_size().width - theme_cache.scroll_border);
+					}
+
+					if ((Math::abs(mouse_position.y) < Math::abs(mouse_position.y - get_size().height)) && (Math::abs(mouse_position.y) < theme_cache.scroll_border)) {
+						point.y = mouse_position.y - theme_cache.scroll_border;
+					} else if (Math::abs(mouse_position.y - get_size().height) < theme_cache.scroll_border) {
+						point.y = mouse_position.y - (get_size().height - theme_cache.scroll_border);
+					}
+
+					point *= theme_cache.scroll_speed * get_process_delta_time();
+					point += get_scroll();
+					h_scroll->set_value(point.x);
+					v_scroll->set_value(point.y);
 				}
-
-				if ((Math::abs(mouse_position.y) < Math::abs(mouse_position.y - get_size().height)) && (Math::abs(mouse_position.y) < theme_cache.scroll_border)) {
-					point.y = mouse_position.y - theme_cache.scroll_border;
-				} else if (Math::abs(mouse_position.y - get_size().height) < theme_cache.scroll_border) {
-					point.y = mouse_position.y - (get_size().height - theme_cache.scroll_border);
-				}
-
-				point *= theme_cache.scroll_speed * get_process_delta_time();
-				point += get_scroll();
-				h_scroll->set_value(point.x);
-				v_scroll->set_value(point.y);
 			}
 		} break;
 

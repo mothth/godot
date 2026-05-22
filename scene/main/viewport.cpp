@@ -41,6 +41,7 @@
 #include "scene/gui/subviewport_container.h"
 #include "scene/main/canvas_layer.h"
 #include "scene/main/window.h"
+#include "scene/main/sub_world.h"
 #include "scene/resources/dpi_texture.h"
 #include "scene/resources/mesh.h"
 #include "scene/resources/text_line.h"
@@ -586,9 +587,14 @@ void Viewport::_notification(int p_what) {
 			RenderingServer::get_singleton()->viewport_set_canvas_transform(viewport, current_canvas, canvas_transform);
 			RenderingServer::get_singleton()->viewport_set_canvas_cull_mask(viewport, canvas_cull_mask);
 			_update_audio_listener_2d();
+
 #ifndef _3D_DISABLED
-			RenderingServer::get_singleton()->viewport_set_scenario(viewport, find_world_3d()->get_scenario());
-			_update_audio_listener_3d();
+			Ref<World3D> world = find_world_3d();
+			if (world.is_valid()) {
+				RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
+				world->_register_viewport(this);
+				_update_audio_listener_3d();
+			}
 #endif // _3D_DISABLED
 
 			add_to_group("_viewports");
@@ -649,6 +655,13 @@ void Viewport::_notification(int p_what) {
 		case NOTIFICATION_EXIT_TREE: {
 			_gui_cancel_tooltip();
 
+#ifndef _3D_DISABLED
+			Ref<World3D> world = find_world_3d();
+			if (world.is_valid()) {
+				world->_remove_viewport(this);
+			}
+#endif // _3D_DISABLED
+
 			RenderingServer::get_singleton()->viewport_set_scenario(viewport, RID());
 			RenderingServer::get_singleton()->viewport_remove_canvas(viewport, current_canvas);
 #ifndef PHYSICS_2D_DISABLED
@@ -671,6 +684,20 @@ void Viewport::_notification(int p_what) {
 			set_physics_process_internal(false);
 
 			RS::get_singleton()->viewport_set_active(viewport, false);
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
+			if (!parent) {
+				if (get_parent()) {
+					parent = get_parent()->get_viewport();
+					RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, parent->get_viewport_rid());
+				} else {
+					parent = nullptr;
+				}
+			}
+		} break;
+
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, RID());
 		} break;
 
@@ -829,10 +856,12 @@ void Viewport::_process_picking() {
 		local_input_handled = false;
 		if (!handle_input_locally) {
 			Viewport *vp = this;
-			while (!Object::cast_to<Window>(vp) && vp->get_parent()) {
+			while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 				vp = vp->get_parent()->get_viewport();
 			}
-			vp->local_input_handled = false;
+			if (vp) {
+				vp->local_input_handled = false;
+			}
 		}
 
 		Ref<InputEvent> ev = physics_picking_events.front()->get();
@@ -3477,13 +3506,12 @@ void Viewport::push_input(RequiredParam<InputEvent> rp_event, bool p_local_coord
 	local_input_handled = false;
 	if (!handle_input_locally) {
 		Viewport *vp = this;
-		while (true) {
-			if (Object::cast_to<Window>(vp) || !vp->get_parent()) {
-				break;
-			}
+		while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
 		}
-		vp->local_input_handled = false;
+		if (vp) {
+			vp->local_input_handled = false;
+		}
 	}
 
 	Ref<InputEvent> ev;
@@ -3683,6 +3711,21 @@ void Viewport::set_disable_input_override(bool p_disable) {
 		_gui_cancel_tooltip();
 	}
 	disable_input_override = p_disable;
+}
+
+
+void Viewport::set_priority(int p_priority) {
+	ERR_MAIN_THREAD_GUARD;
+	if (p_priority == priority) {
+		return;
+	}
+	priority = p_priority;
+	RS::get_singleton()->viewport_set_priority(viewport, p_priority);
+}
+
+int Viewport::get_priority() const {
+	ERR_MAIN_THREAD_GUARD_V(0);
+	return priority;
 }
 
 String Viewport::gui_get_drag_description() const {
@@ -3914,16 +3957,10 @@ void Viewport::set_input_as_handled() {
 	if (!handle_input_locally) {
 		ERR_FAIL_COND(!is_inside_tree());
 		Viewport *vp = this;
-		while (true) {
-			if (Object::cast_to<Window>(vp)) {
-				break;
-			}
-			if (!vp->get_parent()) {
-				break;
-			}
+		while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
 		}
-		if (vp != this) {
+		if (vp && vp != this) {
 			vp->set_input_as_handled();
 			return;
 		}
@@ -3937,16 +3974,10 @@ bool Viewport::is_input_handled() const {
 	if (!handle_input_locally) {
 		ERR_FAIL_COND_V(!is_inside_tree(), false);
 		const Viewport *vp = this;
-		while (true) {
-			if (Object::cast_to<Window>(vp)) {
-				break;
-			}
-			if (!vp->get_parent()) {
-				break;
-			}
+		while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
 		}
-		if (vp != this) {
+		if (vp && vp != this) {
 			return vp->is_input_handled();
 		}
 	}
@@ -4117,13 +4148,10 @@ void Viewport::set_embedding_subwindows(bool p_embed) {
 		}
 	} else {
 		Viewport *vp = this;
-		while (true) {
-			if (!vp->get_parent()) {
-				// Root window reached.
-				break;
-			}
+		while (vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
-			if (vp->is_embedding_subwindows()) {
+			if (!vp) { break; }
+			else if (vp->is_embedding_subwindows()) {
 				for (int i = 0; i < vp->gui.sub_windows.size(); i++) {
 					if (is_ancestor_of(vp->gui.sub_windows[i].window)) {
 						// Prevent change when this viewport has child windows that are displayed in an ancestor viewport.
@@ -4686,8 +4714,10 @@ void Viewport::set_world_3d(const Ref<World3D> &p_world_3d) {
 		return;
 	}
 
-	if (is_inside_tree()) {
+	Ref<World3D> world = find_world_3d();
+	if (is_inside_tree() && world.is_valid()) {
 		_propagate_exit_world_3d(this);
+		world->_remove_viewport(this);
 	}
 
 	if (own_world_3d.is_valid() && world_3d.is_valid()) {
@@ -4705,12 +4735,13 @@ void Viewport::set_world_3d(const Ref<World3D> &p_world_3d) {
 		}
 	}
 
-	if (is_inside_tree()) {
-		_propagate_enter_world_3d(this);
-	}
+	emit_signal(SNAME("world_3d_changed"));
 
-	if (is_inside_tree()) {
-		RenderingServer::get_singleton()->viewport_set_scenario(viewport, find_world_3d()->get_scenario());
+	world = find_world_3d();
+	if (is_inside_tree() && world.is_valid()) {
+		world->_register_viewport(this);
+		_propagate_enter_world_3d(this);
+		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
 	_update_audio_listener_3d();
@@ -4721,17 +4752,18 @@ void Viewport::_own_world_3d_changed() {
 	ERR_FAIL_COND(own_world_3d.is_null());
 
 	if (is_inside_tree()) {
+		own_world_3d->_remove_viewport(this);
 		_propagate_exit_world_3d(this);
 	}
 
 	own_world_3d = world_3d->duplicate();
+	emit_signal(SNAME("world_3d_changed"));
 
-	if (is_inside_tree()) {
+	Ref<World3D> world = find_world_3d();
+	if (is_inside_tree() && world.is_valid()) {
+		world->_register_viewport(this);
 		_propagate_enter_world_3d(this);
-	}
-
-	if (is_inside_tree()) {
-		RenderingServer::get_singleton()->viewport_set_scenario(viewport, find_world_3d()->get_scenario());
+		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
 	_update_audio_listener_3d();
@@ -4743,7 +4775,9 @@ void Viewport::set_use_own_world_3d(bool p_use_own_world_3d) {
 		return;
 	}
 
-	if (is_inside_tree()) {
+	Ref<World3D> world = find_world_3d();	
+	if (is_inside_tree() && world.is_valid()) {
+		world->_remove_viewport(this);
 		_propagate_exit_world_3d(this);
 	}
 
@@ -4761,12 +4795,13 @@ void Viewport::set_use_own_world_3d(bool p_use_own_world_3d) {
 		}
 	}
 
-	if (is_inside_tree()) {
-		_propagate_enter_world_3d(this);
-	}
+	emit_signal(SNAME("world_3d_changed"));
 
-	if (is_inside_tree()) {
-		RenderingServer::get_singleton()->viewport_set_scenario(viewport, find_world_3d()->get_scenario());
+	world = find_world_3d();	
+	if (is_inside_tree() && world.is_valid()) {
+		world->_register_viewport(this);
+		_propagate_enter_world_3d(this);
+		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
 	_update_audio_listener_3d();
@@ -4785,6 +4820,8 @@ void Viewport::_propagate_enter_world_3d(Node *p_node) {
 
 		if (Object::cast_to<Node3D>(p_node) || Object::cast_to<WorldEnvironment>(p_node)) {
 			p_node->notification(Node3D::NOTIFICATION_ENTER_WORLD);
+		} else if (Object::cast_to<SubWorld>(p_node)) {
+			return;
 		} else {
 			Viewport *v = Object::cast_to<Viewport>(p_node);
 			if (v) {
@@ -4808,6 +4845,8 @@ void Viewport::_propagate_exit_world_3d(Node *p_node) {
 
 		if (Object::cast_to<Node3D>(p_node) || Object::cast_to<WorldEnvironment>(p_node)) {
 			p_node->notification(Node3D::NOTIFICATION_EXIT_WORLD);
+		} else if (Object::cast_to<SubWorld>(p_node)) {
+			return;
 		} else {
 			Viewport *v = Object::cast_to<Viewport>(p_node);
 			if (v) {
@@ -5149,6 +5188,9 @@ void Viewport::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_vrs_texture", "texture"), &Viewport::set_vrs_texture);
 	ClassDB::bind_method(D_METHOD("get_vrs_texture"), &Viewport::get_vrs_texture);
 
+	ClassDB::bind_method(D_METHOD("set_priority", "priority"), &Viewport::set_priority);
+	ClassDB::bind_method(D_METHOD("get_priority"), &Viewport::get_priority);
+
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "disable_3d"), "set_disable_3d", "is_3d_disabled");
 #ifndef XR_DISABLED
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_xr"), "set_use_xr", "is_using_xr");
@@ -5220,8 +5262,11 @@ void Viewport::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "oversampling"), "set_use_oversampling", "is_using_oversampling");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "oversampling_override", PROPERTY_HINT_RANGE, "0,16,0.0001,or_greater"), "set_oversampling_override", "get_oversampling_override");
 
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "priority"), "set_priority", "get_priority");
+
 	ADD_SIGNAL(MethodInfo("size_changed"));
 	ADD_SIGNAL(MethodInfo("gui_focus_changed", PropertyInfo(Variant::OBJECT, "node", PROPERTY_HINT_RESOURCE_TYPE, "Control")));
+	ADD_SIGNAL(MethodInfo("world_3d_changed"));
 
 	BIND_ENUM_CONSTANT(SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED);
 	BIND_ENUM_CONSTANT(SHADOW_ATLAS_QUADRANT_SUBDIV_1);

@@ -41,6 +41,8 @@ class CameraAttributes;
 class Camera3D;
 class Compositor;
 class VisibleOnScreenNotifier3D;
+class Viewport;
+class SubWorld;
 struct SpatialIndexer;
 
 class World3D : public Resource {
@@ -59,14 +61,22 @@ private:
 	Ref<Compositor> compositor;
 
 	HashSet<Camera3D *> cameras;
+	HashSet<Viewport *> viewports;
+	HashSet<SubWorld *> sub_worlds;
 
 protected:
 	static void _bind_methods();
 
 	friend class Camera3D;
+	friend class Viewport;
+	friend class SubWorld;
 
 	void _register_camera(Camera3D *p_camera);
 	void _remove_camera(Camera3D *p_camera);
+	void _register_viewport(Viewport *p_viewport);
+	void _remove_viewport(Viewport *p_viewport);
+	void _register_sub_world(SubWorld *p_sub_world);
+	void _remove_sub_world(SubWorld *p_sub_world);
 
 public:
 	RID get_space() const;
@@ -88,6 +98,8 @@ public:
 	Ref<Compositor> get_compositor() const;
 
 	_FORCE_INLINE_ const HashSet<Camera3D *> &get_cameras() const { return cameras; }
+	_FORCE_INLINE_ const HashSet<Viewport *> &get_viewports() const { return viewports; }
+	_FORCE_INLINE_ const HashSet<SubWorld *> &get_sub_worlds() const { return sub_worlds; }
 
 #ifndef PHYSICS_3D_DISABLED
 	PhysicsDirectSpaceState3D *get_direct_space_state();

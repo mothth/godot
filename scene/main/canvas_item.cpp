@@ -131,7 +131,7 @@ CanvasItem *CanvasItem::get_current_item_drawn() {
 }
 
 void CanvasItem::_redraw_callback() {
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		pending_update = false;
 		return;
 	}
@@ -160,7 +160,7 @@ Transform2D CanvasItem::get_global_transform_with_canvas() const {
 	ERR_READ_THREAD_GUARD_V(Transform2D());
 	if (canvas_layer) {
 		return canvas_layer->get_final_transform() * get_global_transform();
-	} else if (is_inside_tree()) {
+	} else if (get_viewport()) {
 		return get_viewport()->get_canvas_transform() * get_global_transform();
 	} else {
 		return get_global_transform();
@@ -169,7 +169,7 @@ Transform2D CanvasItem::get_global_transform_with_canvas() const {
 
 Transform2D CanvasItem::get_screen_transform() const {
 	ERR_READ_THREAD_GUARD_V(Transform2D());
-	ERR_FAIL_COND_V(!is_inside_tree(), Transform2D());
+	ERR_FAIL_COND_V(!get_viewport(), Transform2D());
 	return get_viewport()->get_popup_base_transform() * get_global_transform_with_canvas();
 }
 
@@ -220,7 +220,7 @@ void CanvasItem::_set_global_invalid(bool p_invalid) const {
 }
 
 void CanvasItem::_top_level_raise_self() {
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -303,7 +303,9 @@ void CanvasItem::_notification(int p_what) {
 			DisplayServer::get_singleton()->accessibility_update_set_flag(ae, DisplayServer::AccessibilityFlags::FLAG_HIDDEN, !visible);
 		} break;
 
-		case NOTIFICATION_ENTER_TREE: {
+		// Incandescence - This and NOTIFICATION_EXIT_VIEWPORT is temporary, these were originally NOTIFICATION_*_TREE,
+		// but it's just easier to have this on the viewport notification as in most cases, it happens right after and only after the tree notifications anyway.
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			ERR_MAIN_THREAD_GUARD;
 			ERR_FAIL_COND(!is_inside_tree());
 
@@ -366,9 +368,9 @@ void CanvasItem::_notification(int p_what) {
 				get_tree()->xform_change_list.add(&xform_change);
 			}
 
-			if (get_viewport()) {
+			// if (get_viewport()) {
 				get_parent()->connect(SNAME("child_order_changed"), callable_mp(get_viewport(), &Viewport::canvas_parent_mark_dirty).bind(get_parent()), CONNECT_REFERENCE_COUNTED);
-			}
+			// }
 
 			// If using physics interpolation, reset for this node only,
 			// as a helper, as in most cases, users will want items reset when
@@ -384,7 +386,8 @@ void CanvasItem::_notification(int p_what) {
 			}
 
 		} break;
-		case NOTIFICATION_EXIT_TREE: {
+
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			ERR_MAIN_THREAD_GUARD;
 
 			if (xform_change.in_list()) {
@@ -419,9 +422,9 @@ void CanvasItem::_notification(int p_what) {
 			_set_global_invalid(true);
 			parent_visible_in_tree = false;
 
-			if (get_viewport()) {
+			// if (get_viewport()) {
 				get_parent()->disconnect(SNAME("child_order_changed"), callable_mp(get_viewport(), &Viewport::canvas_parent_mark_dirty).bind(get_parent()));
-			}
+			// }
 		} break;
 
 		case NOTIFICATION_RESET_PHYSICS_INTERPOLATION: {
@@ -1124,13 +1127,13 @@ void CanvasItem::set_canvas_item_use_identity_transform(bool p_enable) {
 
 Rect2 CanvasItem::get_viewport_rect() const {
 	ERR_READ_THREAD_GUARD_V(Rect2());
-	ERR_FAIL_COND_V(!is_inside_tree(), Rect2());
+	ERR_FAIL_COND_V(!get_viewport(), Rect2());
 	return get_viewport()->get_visible_rect();
 }
 
 RID CanvasItem::get_canvas() const {
 	ERR_READ_THREAD_GUARD_V(RID());
-	ERR_FAIL_COND_V(!is_inside_tree(), RID());
+	ERR_FAIL_COND_V(!get_viewport(), RID());
 
 	if (canvas_layer) {
 		return canvas_layer->get_canvas();
@@ -1164,6 +1167,7 @@ Ref<World2D> CanvasItem::get_world_2d() const {
 
 	CanvasItem *tl = get_top_level();
 
+	// Incandescence, TODO - SubWorld currently only governs World3D so this is okay, but we plan to add World2D at some point even though The Story Machine doesn't use it for that.
 	if (tl->get_viewport()) {
 		return tl->get_viewport()->find_world_2d();
 	} else {
@@ -1173,7 +1177,7 @@ Ref<World2D> CanvasItem::get_world_2d() const {
 
 RID CanvasItem::get_viewport_rid() const {
 	ERR_READ_THREAD_GUARD_V(RID());
-	ERR_FAIL_COND_V(!is_inside_tree(), RID());
+	ERR_FAIL_COND_V(!get_viewport(), RID());
 	return get_viewport()->get_viewport_rid();
 }
 
@@ -1530,7 +1534,7 @@ void CanvasItem::_bind_methods() {
 
 Transform2D CanvasItem::get_canvas_transform() const {
 	ERR_READ_THREAD_GUARD_V(Transform2D());
-	ERR_FAIL_COND_V(!is_inside_tree(), Transform2D());
+	ERR_FAIL_COND_V(!get_viewport(), Transform2D());
 
 	if (canvas_layer) {
 		return canvas_layer->get_final_transform();
@@ -1543,7 +1547,7 @@ Transform2D CanvasItem::get_canvas_transform() const {
 
 Transform2D CanvasItem::get_viewport_transform() const {
 	ERR_READ_THREAD_GUARD_V(Transform2D());
-	ERR_FAIL_COND_V(!is_inside_tree(), Transform2D());
+	ERR_FAIL_COND_V(!get_viewport(), Transform2D());
 
 	if (canvas_layer) {
 		return get_viewport()->get_final_transform() * canvas_layer->get_final_transform();

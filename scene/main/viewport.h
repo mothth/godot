@@ -51,6 +51,7 @@ class SceneTreeTimer;
 class Viewport;
 class Window;
 class World2D;
+class SubWorld;
 
 class ViewportTexture : public Texture2D {
 	GDCLASS(ViewportTexture, Texture2D);
@@ -256,6 +257,8 @@ private:
 	Size2i size = Size2i(512, 512);
 	Size2 size_2d_override;
 	bool size_allocated = false;
+
+	int priority;
 
 	RID contact_2d_debug;
 	RID contact_3d_debug_multimesh;
@@ -621,6 +624,9 @@ public:
 	bool is_input_disabled() const;
 
 	void set_disable_input_override(bool p_disable);
+
+	void set_priority(int p_priority);
+	int get_priority() const;
 
 	Vector2 get_mouse_position() const;
 	void warp_mouse(const Vector2 &p_position);

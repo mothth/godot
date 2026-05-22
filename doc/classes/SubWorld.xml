@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SubWorld" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Constrains child nodes to a specific [World3D] rather than a [Viewport].
+	</brief_description>
+	<description>
+		A [SubWorld] contrains its children to a specific [World3D] and creates a disconnect from any given [Viewport].
+		This allows nodes to change viewport but remain in the same world without ever leaving the tree. This is unlike usual nodes, which can change world without leaving the tree but cannot change viewports without doing so.
+		[SubWorld] can only leave its children in a state of no [Viewport], a [World3D] will always be provided to the children.
+
+		[SubWorld] was made for The Story Machine, and therefore is only intended for 3D and does not have a 2D counterpart. However, with 3D disabled, you can still use [SubWorld] as a means of switching viewports for child nodes using the [member force_viewport] member.
+		World2D support might be considered in the future.
+	</description>
+	<methods>
+		<method name="find_world_3d" qualifiers="const">
+			<return type="World3D" />
+			<description>
+				Returns the [World3D] the [SubWorld] is bound to. This may not be equal to [member world_3d] if it is undefined.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="world_3d" type="World3D" setter="set_world_3d" getter="get_world_3d">
+			The [World3D] to bind to. If this is not defined, the [World3D] from the parent [Viewport] in the tree will be taken instead.
+		</member>
+		<member name="force_viewport" type="Viewport" setter="set_force_viewport" getter="get_force_viewport">
+			The [Viewport] to force the [SubWorld] to use. The given [Viewport] must use the same world as [member world_3d], if it is defined. If [member world_3d] is not defined, then any [Viewport] can be used and the [World3D] will be taken from it.
+		</member>
+	</members>
+	<signals>
+		<signal name="viewport_changed">
+			<description>
+				Emitted when the main [Viewport] of the [SubWorld] is changed.
+			</description>
+		</signal>
+	</signals>
+</class>

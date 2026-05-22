@@ -459,10 +459,15 @@ void ScrollContainer::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_READY: {
-			Viewport *viewport = get_viewport();
-			ERR_FAIL_NULL(viewport);
-			viewport->connect("gui_focus_changed", callable_mp(this, &ScrollContainer::_gui_focus_changed));
 			_reposition_children();
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
+			get_viewport()->connect("gui_focus_changed", callable_mp(this, &ScrollContainer::_gui_focus_changed));
+		} break;
+
+		case NOTIFICATION_EXIT_VIEWPORT: {
+			get_viewport()->disconnect("gui_focus_changed", callable_mp(this, &ScrollContainer::_gui_focus_changed));
 		} break;
 
 		case NOTIFICATION_SORT_CHILDREN: {
@@ -486,7 +491,7 @@ void ScrollContainer::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			if (scroll_on_drag_hover && get_viewport()->gui_is_dragging()) {
+			if (scroll_on_drag_hover && get_viewport() && get_viewport()->gui_is_dragging()) {
 				Point2 mouse_position = get_viewport()->get_mouse_position() - get_global_position();
 				Transform2D xform = get_transform();
 				if (Rect2(Point2(), xform.get_scale() * get_size()).grow(scroll_border).has_point(mouse_position)) {

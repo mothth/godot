@@ -436,19 +436,16 @@ void Node2D::_notification(int p_notification) {
 			DisplayServer::get_singleton()->accessibility_update_set_role(ae, DisplayServer::AccessibilityRole::ROLE_CONTAINER);
 		} break;
 
-		case NOTIFICATION_ENTER_TREE: {
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			ERR_MAIN_THREAD_GUARD;
-
-			if (get_viewport()) {
-				get_parent()->connect(SNAME("child_order_changed"), callable_mp(get_viewport(), &Viewport::gui_set_root_order_dirty), CONNECT_REFERENCE_COUNTED);
-			}
+			ERR_FAIL_NULL(get_viewport());
+			get_parent()->connect(SNAME("child_order_changed"), callable_mp(get_viewport(), &Viewport::gui_set_root_order_dirty), CONNECT_REFERENCE_COUNTED);
 		} break;
-		case NOTIFICATION_EXIT_TREE: {
+		
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			ERR_MAIN_THREAD_GUARD;
-
-			if (get_viewport()) {
-				get_parent()->disconnect(SNAME("child_order_changed"), callable_mp(get_viewport(), &Viewport::gui_set_root_order_dirty));
-			}
+			ERR_FAIL_NULL(get_viewport());
+			get_parent()->disconnect(SNAME("child_order_changed"), callable_mp(get_viewport(), &Viewport::gui_set_root_order_dirty));
 		} break;
 	}
 }

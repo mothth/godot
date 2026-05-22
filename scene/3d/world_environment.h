@@ -35,12 +35,18 @@
 #include "scene/resources/compositor.h"
 #include "scene/resources/environment.h"
 
+class World3D;
+
 class WorldEnvironment : public Node {
 	GDCLASS(WorldEnvironment, Node);
+
+private:
+	friend class SubWorld; // To access world_3d
 
 	Ref<Environment> environment;
 	Ref<CameraAttributes> camera_attributes;
 	Ref<Compositor> compositor;
+	Ref<World3D> world_3d;
 
 	void _update_current_environment();
 	void _update_current_camera_attributes();

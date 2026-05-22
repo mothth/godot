@@ -107,6 +107,7 @@
 #include "scene/main/timer.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
+#include "scene/main/sub_world.h"
 #include "scene/resources/animation_library.h"
 #include "scene/resources/atlas_texture.h"
 #include "scene/resources/audio_stream_polyphonic.h"
@@ -455,6 +456,8 @@ void register_scene_types() {
 	GDREGISTER_CLASS(CanvasLayer);
 	GDREGISTER_CLASS(ResourcePreloader);
 	GDREGISTER_CLASS(Window);
+
+	GDREGISTER_CLASS(SubWorld);
 
 	GDREGISTER_CLASS(StatusIndicator);
 

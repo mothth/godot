@@ -49,6 +49,7 @@ STATIC_ASSERT_INCOMPLETE_TYPE(class, Engine);
 #include "scene/main/multiplayer_api.h"
 #include "scene/main/window.h"
 #include "scene/resources/packed_scene.h"
+#include "scene/main/sub_world.h"
 #include "viewport.h"
 
 #ifdef DEBUG_ENABLED
@@ -97,7 +98,6 @@ void Node::_notification(int p_notification) {
 		} break;
 
 		case NOTIFICATION_ENTER_TREE: {
-			ERR_FAIL_NULL(get_viewport());
 			ERR_FAIL_NULL(data.tree);
 
 			if (data.tree->is_accessibility_supported() && !is_part_of_edited_scene()) {
@@ -160,19 +160,6 @@ void Node::_notification(int p_notification) {
 			data.is_auto_translate_dirty = true;
 			data.is_translation_domain_dirty = true;
 
-			if (data.input) {
-				add_to_group("_vp_input" + itos(get_viewport()->get_instance_id()));
-			}
-			if (data.shortcut_input) {
-				add_to_group("_vp_shortcut_input" + itos(get_viewport()->get_instance_id()));
-			}
-			if (data.unhandled_input) {
-				add_to_group("_vp_unhandled_input" + itos(get_viewport()->get_instance_id()));
-			}
-			if (data.unhandled_key_input) {
-				add_to_group("_vp_unhandled_key_input" + itos(get_viewport()->get_instance_id()));
-			}
-
 			data.tree->nodes_in_tree_count++;
 
 		} break;
@@ -184,7 +171,6 @@ void Node::_notification(int p_notification) {
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
-			ERR_FAIL_NULL(get_viewport());
 			ERR_FAIL_NULL(data.tree);
 
 			if (data.tree->is_accessibility_supported() && !is_part_of_edited_scene()) {
@@ -202,19 +188,6 @@ void Node::_notification(int p_notification) {
 
 			data.tree->nodes_in_tree_count--;
 
-			if (data.input) {
-				remove_from_group("_vp_input" + itos(get_viewport()->get_instance_id()));
-			}
-			if (data.shortcut_input) {
-				remove_from_group("_vp_shortcut_input" + itos(get_viewport()->get_instance_id()));
-			}
-			if (data.unhandled_input) {
-				remove_from_group("_vp_unhandled_input" + itos(get_viewport()->get_instance_id()));
-			}
-			if (data.unhandled_key_input) {
-				remove_from_group("_vp_unhandled_key_input" + itos(get_viewport()->get_instance_id()));
-			}
-
 			// Remove from processing first.
 			if (_is_any_processing()) {
 				_remove_from_process_thread_group();
@@ -229,6 +202,40 @@ void Node::_notification(int p_notification) {
 			if (data.path_cache) {
 				memdelete(data.path_cache);
 				data.path_cache = nullptr;
+			}
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
+			ERR_FAIL_NULL(get_viewport());
+
+			if (data.input) {
+				add_to_group("_vp_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.shortcut_input) {
+				add_to_group("_vp_shortcut_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.unhandled_input) {
+				add_to_group("_vp_unhandled_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.unhandled_key_input) {
+				add_to_group("_vp_unhandled_key_input" + itos(get_viewport()->get_instance_id()));
+			}
+		} break;
+
+		case NOTIFICATION_EXIT_VIEWPORT: {
+			ERR_FAIL_NULL(get_viewport());
+
+			if (data.input) {
+				remove_from_group("_vp_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.shortcut_input) {
+				remove_from_group("_vp_shortcut_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.unhandled_input) {
+				remove_from_group("_vp_unhandled_input" + itos(get_viewport()->get_instance_id()));
+			}
+			if (data.unhandled_key_input) {
+				remove_from_group("_vp_unhandled_key_input" + itos(get_viewport()->get_instance_id()));
 			}
 		} break;
 
@@ -342,9 +349,10 @@ void Node::_propagate_enter_tree() {
 		data.depth = 1;
 	}
 
+	Viewport *parent_viewport = data.parent ? data.parent->data.viewport : nullptr;
 	data.viewport = Object::cast_to<Viewport>(this);
-	if (!data.viewport && data.parent) {
-		data.viewport = data.parent->data.viewport;
+	if (!data.viewport && !Object::cast_to<SubWorld>(this)) {
+		data.viewport = parent_viewport;
 	}
 
 	for (KeyValue<StringName, GroupData> &E : data.grouped) {
@@ -352,6 +360,13 @@ void Node::_propagate_enter_tree() {
 	}
 
 	notification(NOTIFICATION_ENTER_TREE);
+
+	// We check that both our viewport and the parent viewport are valid as
+	// Viewport should only receive the notification if it has a parent viewport,
+	// but SubWorld only receives these notifications when it changes its own viewports with no regard of the parent.
+	if (data.viewport && parent_viewport) {
+		notification(NOTIFICATION_ENTER_VIEWPORT);
+	}
 
 	GDVIRTUAL_CALL(_enter_tree);
 
@@ -423,6 +438,10 @@ void Node::_propagate_exit_tree() {
 	emit_signal(SceneStringName(tree_exiting));
 
 	notification(NOTIFICATION_EXIT_TREE, true);
+	if (data.viewport && data.parent && data.parent->data.viewport) {
+		notification(NOTIFICATION_EXIT_VIEWPORT, true);
+	}
+
 	if (data.tree) {
 		data.tree->node_removed(this);
 	}
@@ -1250,7 +1269,7 @@ void Node::set_process_input(bool p_enable) {
 	}
 
 	data.input = p_enable;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -1271,7 +1290,7 @@ void Node::set_process_shortcut_input(bool p_enable) {
 		return;
 	}
 	data.shortcut_input = p_enable;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -1292,7 +1311,7 @@ void Node::set_process_unhandled_input(bool p_enable) {
 		return;
 	}
 	data.unhandled_input = p_enable;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -1313,7 +1332,7 @@ void Node::set_process_unhandled_key_input(bool p_enable) {
 		return;
 	}
 	data.unhandled_key_input = p_enable;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -2604,6 +2623,21 @@ void Node::propagate_notification(int p_notification) {
 	data.blocked--;
 }
 
+void Node::propagate_notification_in_tree(int p_notification) {
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	ERR_THREAD_GUARD
+	data.blocked++;
+	notification(p_notification);
+
+	for (KeyValue<StringName, Node *> &K : data.children) {
+		K.value->propagate_notification_in_tree(p_notification);
+	}
+	data.blocked--;
+}
+
 void Node::propagate_call(const StringName &p_method, const Array &p_args, const bool p_parent_first) {
 	ERR_THREAD_GUARD
 	data.blocked++;
@@ -3573,7 +3607,7 @@ void Node::_call_input(const Ref<InputEvent> &p_event) {
 	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
 		GDVIRTUAL_CALL(_input, p_event);
 	}
-	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
+	if (!get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
 	input(p_event);
@@ -3583,7 +3617,7 @@ void Node::_call_shortcut_input(const Ref<InputEvent> &p_event) {
 	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
 		GDVIRTUAL_CALL(_shortcut_input, p_event);
 	}
-	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
+	if (!get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
 	shortcut_input(p_event);
@@ -3593,7 +3627,7 @@ void Node::_call_unhandled_input(const Ref<InputEvent> &p_event) {
 	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
 		GDVIRTUAL_CALL(_unhandled_input, p_event);
 	}
-	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
+	if (!get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
 	unhandled_input(p_event);
@@ -3603,7 +3637,7 @@ void Node::_call_unhandled_key_input(const Ref<InputEvent> &p_event) {
 	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
 		GDVIRTUAL_CALL(_unhandled_key_input, p_event);
 	}
-	if (!is_inside_tree() || !get_viewport() || get_viewport()->is_input_handled()) {
+	if (!get_viewport() || get_viewport()->is_input_handled()) {
 		return;
 	}
 	unhandled_key_input(p_event);
@@ -3799,6 +3833,7 @@ void Node::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_scene_file_path", "scene_file_path"), &Node::set_scene_file_path);
 	ClassDB::bind_method(D_METHOD("get_scene_file_path"), &Node::get_scene_file_path);
 	ClassDB::bind_method(D_METHOD("propagate_notification", "what"), &Node::propagate_notification);
+	ClassDB::bind_method(D_METHOD("propagate_notification_in_tree", "what"), &Node::propagate_notification_in_tree);
 	ClassDB::bind_method(D_METHOD("propagate_call", "method", "args", "parent_first"), &Node::propagate_call, DEFVAL(Array()), DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("set_physics_process", "enable"), &Node::set_physics_process);
 	ClassDB::bind_method(D_METHOD("get_physics_process_delta_time"), &Node::get_physics_process_delta_time);
@@ -3957,6 +3992,8 @@ void Node::_bind_methods() {
 	BIND_CONSTANT(NOTIFICATION_POST_ENTER_TREE);
 	BIND_CONSTANT(NOTIFICATION_DISABLED);
 	BIND_CONSTANT(NOTIFICATION_ENABLED);
+	BIND_CONSTANT(NOTIFICATION_ENTER_VIEWPORT);
+	BIND_CONSTANT(NOTIFICATION_EXIT_VIEWPORT);
 	BIND_CONSTANT(NOTIFICATION_RESET_PHYSICS_INTERPOLATION);
 
 	BIND_CONSTANT(NOTIFICATION_EDITOR_PRE_SAVE);

@@ -72,14 +72,14 @@ void AudioListener3D::_get_property_list(List<PropertyInfo> *p_list) const {
 }
 
 void AudioListener3D::_update_listener() {
-	if (is_inside_tree() && is_current()) {
+	if (get_viewport() && is_current()) {
 		get_viewport()->_listener_transform_3d_changed_notify();
 	}
 }
 
 void AudioListener3D::_notification(int p_what) {
 	switch (p_what) {
-		case NOTIFICATION_ENTER_WORLD: {
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			bool first_listener = get_viewport()->_audio_listener_3d_add(this);
 			if (!is_part_of_edited_scene() && (current || first_listener)) {
 				make_current();
@@ -93,7 +93,7 @@ void AudioListener3D::_notification(int p_what) {
 			}
 		} break;
 
-		case NOTIFICATION_EXIT_WORLD: {
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			if (!is_part_of_edited_scene()) {
 				if (is_current()) {
 					clear_current();
@@ -116,7 +116,7 @@ Transform3D AudioListener3D::get_listener_transform() const {
 void AudioListener3D::make_current() {
 	current = true;
 
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -125,7 +125,7 @@ void AudioListener3D::make_current() {
 
 void AudioListener3D::clear_current() {
 	current = false;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -136,7 +136,7 @@ void AudioListener3D::clear_current() {
 }
 
 bool AudioListener3D::is_current() const {
-	if (is_inside_tree() && !is_part_of_edited_scene()) {
+	if (get_viewport() && !is_part_of_edited_scene()) {
 		return get_viewport()->get_audio_listener_3d() == this;
 	} else {
 		return current;

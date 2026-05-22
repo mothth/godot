@@ -34,12 +34,12 @@
 
 void ParallaxBackground::_notification(int p_what) {
 	switch (p_what) {
-		case NOTIFICATION_ENTER_TREE: {
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			group_name = "__cameras_" + itos(get_viewport().get_id());
 			add_to_group(group_name);
 		} break;
 
-		case NOTIFICATION_EXIT_TREE: {
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			remove_from_group(group_name);
 		} break;
 	}

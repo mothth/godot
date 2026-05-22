@@ -33,6 +33,7 @@
 #include "core/math/transform_interpolator.h"
 #include "scene/3d/visual_instance_3d.h"
 #include "scene/main/viewport.h"
+#include "scene/main/sub_world.h"
 #include "scene/property_utils.h"
 
 /*
@@ -203,7 +204,10 @@ void Node3D::_notification(int p_what) {
 				get_tree()->get_scene_tree_fti().node_3d_notify_delete(this);
 			}
 
-			notification(NOTIFICATION_EXIT_WORLD, true);
+			if (data.world_3d.is_valid()) {
+				notification(NOTIFICATION_EXIT_WORLD, true);
+			}
+			
 			if (xform_change.in_list()) {
 				get_tree()->xform_change_list.remove(&xform_change);
 			}
@@ -236,14 +240,33 @@ void Node3D::_notification(int p_what) {
 			ERR_MAIN_THREAD_GUARD;
 
 			data.inside_world = true;
-			data.viewport = nullptr;
-			Node *parent = get_parent();
-			while (parent && !data.viewport) {
-				data.viewport = Object::cast_to<Viewport>(parent);
-				parent = parent->get_parent();
+
+			// Get viewport and World3D
+			data.viewport = get_viewport();
+			if (!data.world_3d.is_valid() && get_viewport()) {
+				data.world_3d = get_viewport()->find_world_3d();
 			}
 
-			ERR_FAIL_NULL(data.viewport);
+			// Look for World3D if we still don't have it
+			if (!data.world_3d.is_valid()) {
+				if (data.parent && data.parent->data.world_3d.is_valid()) {
+					data.world_3d = data.parent->data.world_3d;
+				} else {
+					Node *parent = get_parent();
+					while (parent) {
+						SubWorld *sub_world = Object::cast_to<SubWorld>(parent);
+						if (sub_world) {
+							data.viewport = sub_world->get_viewport();
+							data.world_3d = sub_world->find_world_3d();
+							break;
+						}
+
+						parent = parent->get_parent();
+					}
+				}
+			}
+
+			ERR_FAIL_NULL(data.world_3d);
 
 			if (get_script_instance()) {
 				get_script_instance()->call(SNAME("_enter_world"));
@@ -268,8 +291,21 @@ void Node3D::_notification(int p_what) {
 				get_script_instance()->call(SNAME("_exit_world"));
 			}
 
-			data.viewport = nullptr;
+			data.world_3d = Ref<World3D>();
 			data.inside_world = false;
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
+			if (data.viewport != get_viewport()) {
+				data.viewport = get_viewport();
+				// if (!data.world_3d.is_valid()) {
+				// 	data.world_3d = data.viewport->find_world_3d();
+				// }
+			}
+		} break;
+
+		case NOTIFICATION_EXIT_VIEWPORT: {
+			data.viewport = nullptr;
 		} break;
 
 		case NOTIFICATION_TRANSFORM_CHANGED: {
@@ -1075,9 +1111,9 @@ bool Node3D::is_set_as_top_level() const {
 Ref<World3D> Node3D::get_world_3d() const {
 	ERR_READ_THREAD_GUARD_V(Ref<World3D>()); // World3D can only be set from main thread, so it's safe to obtain on threads.
 	ERR_FAIL_COND_V(!is_inside_world(), Ref<World3D>());
-	ERR_FAIL_NULL_V(data.viewport, Ref<World3D>());
+	// ERR_FAIL_NULL_V(data.viewport, Ref<World3D>());
 
-	return data.viewport->find_world_3d();
+	return data.world_3d;
 }
 
 void Node3D::_propagate_visibility_changed() {

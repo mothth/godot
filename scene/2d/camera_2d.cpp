@@ -336,28 +336,9 @@ void Camera2D::_notification(int p_what) {
 
 		case NOTIFICATION_ENTER_TREE: {
 			ERR_FAIL_COND(!is_inside_tree());
-			if (custom_viewport && ObjectDB::get_instance(custom_viewport_id)) {
-				viewport = custom_viewport;
-			} else {
-				viewport = get_viewport();
-			}
-
-			canvas = get_canvas();
-
-			RID vp = viewport->get_viewport_rid();
-
-			group_name = "__cameras_" + itos(vp.get_id());
-			canvas_group_name = "__cameras_c" + itos(canvas.get_id());
-			add_to_group(group_name);
-			add_to_group(canvas_group_name);
-
-			if (!is_part_of_edited_scene() && enabled && !viewport->get_camera_2d()) {
-				make_current();
-			}
 
 			_update_process_callback();
 			first = true;
-			_update_scroll();
 
 			// Note that NOTIFICATION_RESET_PHYSICS_INTERPOLATION
 			// is automatically called before this because Camera2D is inherited
@@ -372,15 +353,39 @@ void Camera2D::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
+			just_exited_tree = true;
+			_interpolation_data.accepting_resets = false;
+			callable_mp(this, &Camera2D::_reset_just_exited).call_deferred();
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
+			if (custom_viewport && ObjectDB::get_instance(custom_viewport_id)) {
+				viewport = custom_viewport;
+			} else {
+				viewport = get_viewport();
+			}
+
+			canvas = get_canvas();
+			RID vp = viewport->get_viewport_rid();
+			group_name = "__cameras_" + itos(vp.get_id());
+			canvas_group_name = "__cameras_c" + itos(canvas.get_id());
+			add_to_group(group_name);
+			add_to_group(canvas_group_name);
+
+			if (!is_part_of_edited_scene() && enabled && !viewport->get_camera_2d()) {
+				make_current();
+			}
+			
+			_update_scroll();
+		} break;
+
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			remove_from_group(group_name);
 			remove_from_group(canvas_group_name);
 			if (is_current()) {
 				clear_current();
 			}
 			viewport = nullptr;
-			just_exited_tree = true;
-			_interpolation_data.accepting_resets = false;
-			callable_mp(this, &Camera2D::_reset_just_exited).call_deferred();
 		} break;
 
 #ifdef TOOLS_ENABLED
@@ -810,6 +815,18 @@ void Camera2D::set_custom_viewport(Node *p_viewport) {
 		return;
 	}
 
+	notification(NOTIFICATION_EXIT_VIEWPORT);
+	
+	custom_viewport = Object::cast_to<Viewport>(p_viewport);
+	if (custom_viewport) {
+		custom_viewport_id = custom_viewport->get_instance_id();
+	} else {
+		custom_viewport_id = ObjectID();
+	}
+
+	notification(NOTIFICATION_ENTER_VIEWPORT);
+
+	/*
 	if (is_inside_tree()) {
 		remove_from_group(group_name);
 		remove_from_group(canvas_group_name);
@@ -836,6 +853,7 @@ void Camera2D::set_custom_viewport(Node *p_viewport) {
 		add_to_group(group_name);
 		add_to_group(canvas_group_name);
 	}
+	*/
 }
 
 Node *Camera2D::get_custom_viewport() const {

@@ -116,7 +116,7 @@ Vector3 XRCamera3D::project_local_ray_normal(const Point2 &p_pos) const {
 	ERR_FAIL_NULL_V(xr_server, Vector3());
 
 	Ref<XRInterface> xr_interface = xr_server->get_primary_interface();
-	if (xr_interface.is_null()) {
+	if (xr_interface.is_null() || !get_viewport()) {
 		// we might be in the editor or have VR turned off, just call superclass
 		return Camera3D::project_local_ray_normal(p_pos);
 	}
@@ -146,7 +146,7 @@ Point2 XRCamera3D::unproject_position(const Vector3 &p_pos) const {
 		return Camera3D::unproject_position(p_pos);
 	}
 
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector2(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector2(), "Camera has no viewport.");
 
 	Size2 viewport_size = get_viewport()->get_visible_rect().size;
 
@@ -176,7 +176,7 @@ Vector3 XRCamera3D::project_position(const Point2 &p_point, real_t p_z_depth) co
 		return Camera3D::project_position(p_point, p_z_depth);
 	}
 
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector3(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector3(), "Camera has no viewport.");
 
 	Size2 viewport_size = get_viewport()->get_visible_rect().size;
 
@@ -206,7 +206,7 @@ Vector<Plane> XRCamera3D::get_frustum() const {
 		return Camera3D::get_frustum();
 	}
 
-	ERR_FAIL_COND_V(!is_inside_world(), Vector<Plane>());
+	ERR_FAIL_COND_V(!get_viewport(), Vector<Plane>());
 
 	Size2 viewport_size = get_viewport()->get_visible_rect().size;
 	// TODO Just use the first view for now, this is mostly for debugging so we may look into using our combined projection here.

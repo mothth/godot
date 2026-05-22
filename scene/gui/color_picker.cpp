@@ -1722,13 +1722,13 @@ void ColorPicker::_options_menu_cbk(int p_which) {
 }
 
 void ColorPicker::_block_input_on_popup_show() {
-	if (!get_tree()->get_root()->is_embedding_subwindows()) {
+	if (get_viewport() && !get_tree()->get_root()->is_embedding_subwindows()) {
 		get_viewport()->set_disable_input(true);
 	}
 }
 
 void ColorPicker::_enable_input_on_popup_hide() {
-	if (!get_tree()->get_root()->is_embedding_subwindows()) {
+	if (get_viewport() && !get_tree()->get_root()->is_embedding_subwindows()) {
 		get_viewport()->set_disable_input(false);
 	}
 }
@@ -2333,7 +2333,7 @@ void ColorPickerPopupPanel::_input_from_window(const Ref<InputEvent> &p_event) {
 /////////////////
 
 void ColorPickerButton::_about_to_popup() {
-	if (!get_tree()->get_root()->is_embedding_subwindows()) {
+	if (get_viewport() && !get_tree()->get_root()->is_embedding_subwindows()) {
 		get_viewport()->set_disable_input(true);
 	}
 	set_pressed(true);
@@ -2358,7 +2358,7 @@ void ColorPickerButton::_modal_closed() {
 		emit_signal(SNAME("popup_closed"));
 		set_pressed(false);
 	}
-	if (!get_tree()->get_root()->is_embedding_subwindows()) {
+	if (get_viewport() && !get_tree()->get_root()->is_embedding_subwindows()) {
 		get_viewport()->set_disable_input(false);
 	}
 }

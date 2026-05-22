@@ -156,7 +156,7 @@ void Camera3D::_validate_property(PropertyInfo &p_property) const {
 }
 
 void Camera3D::_update_camera() {
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -191,23 +191,22 @@ void Camera3D::_update_process_mode() {
 
 void Camera3D::_notification(int p_what) {
 	switch (p_what) {
-		case NOTIFICATION_ENTER_WORLD: {
-			// Needs to track the Viewport because it's needed on NOTIFICATION_EXIT_WORLD
-			// and Spatial will handle it first, including clearing its reference to the Viewport,
-			// therefore making it impossible to subclasses to access it
-			viewport = get_viewport();
-			ERR_FAIL_NULL(viewport);
+		case NOTIFICATION_ENTER_VIEWPORT: {
+			if (is_inside_world()) {
+				viewport = get_viewport();
+				ERR_FAIL_NULL(viewport);
 
-			bool first_camera = viewport->_camera_3d_add(this);
-			if (current || first_camera) {
-				viewport->_camera_3d_set(this);
-			}
+				bool first_camera = viewport->_camera_3d_add(this);
+				if (current || first_camera) {
+					viewport->_camera_3d_set(this);
+				}
 
 #ifdef TOOLS_ENABLED
-			if (Engine::get_singleton()->is_editor_hint()) {
-				viewport->connect(SNAME("size_changed"), callable_mp((Node3D *)this, &Camera3D::update_gizmos));
-			}
+				if (Engine::get_singleton()->is_editor_hint()) {
+					viewport->connect(SNAME("size_changed"), callable_mp((Node3D *)this, &Camera3D::update_gizmos));
+				}
 #endif
+			}
 		} break;
 
 		case NOTIFICATION_TRANSFORM_CHANGED: {
@@ -234,7 +233,10 @@ void Camera3D::_notification(int p_what) {
 					current = false;
 				}
 			}
+		}
 
+		// fallthrough
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			if (viewport) {
 #ifdef TOOLS_ENABLED
 				if (Engine::get_singleton()->is_editor_hint()) {
@@ -278,6 +280,10 @@ Transform3D Camera3D::get_camera_transform() const {
 }
 
 Projection Camera3D::_get_camera_projection(real_t p_near) const {
+	if (!get_viewport()) {
+		return Projection();
+	}
+
 	Size2 viewport_size = get_viewport()->get_visible_rect().size;
 	Projection cm;
 
@@ -382,7 +388,7 @@ RID Camera3D::get_camera() const {
 void Camera3D::make_current() {
 	current = true;
 
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -391,7 +397,7 @@ void Camera3D::make_current() {
 
 void Camera3D::clear_current(bool p_enable_next) {
 	current = false;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 
@@ -413,7 +419,7 @@ void Camera3D::set_current(bool p_enabled) {
 }
 
 bool Camera3D::is_current() const {
-	if (is_inside_tree() && !is_part_of_edited_scene()) {
+	if (get_viewport() && !is_part_of_edited_scene()) {
 		return get_viewport()->get_camera_3d() == this;
 	} else {
 		return current;
@@ -426,7 +432,7 @@ Vector3 Camera3D::project_ray_normal(const Point2 &p_pos) const {
 }
 
 Vector3 Camera3D::project_local_ray_normal(const Point2 &p_pos) const {
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector3(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector3(), "Camera has no viewport.");
 
 	Size2 viewport_size = get_viewport()->get_camera_rect_size();
 	Vector2 cpos = get_viewport()->get_camera_coords(p_pos);
@@ -444,7 +450,7 @@ Vector3 Camera3D::project_local_ray_normal(const Point2 &p_pos) const {
 }
 
 Vector3 Camera3D::project_ray_origin(const Point2 &p_pos) const {
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector3(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector3(), "Camera has no viewport.");
 
 	Size2 viewport_size = get_viewport()->get_camera_rect_size();
 	Vector2 cpos = get_viewport()->get_camera_coords(p_pos);
@@ -479,7 +485,7 @@ bool Camera3D::is_position_behind(const Vector3 &p_pos) const {
 }
 
 Vector<Vector3> Camera3D::get_near_plane_points() const {
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector<Vector3>(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector<Vector3>(), "Camera has no viewport.");
 
 	Projection cm = _get_camera_projection(_near);
 
@@ -497,7 +503,7 @@ Vector<Vector3> Camera3D::get_near_plane_points() const {
 }
 
 Point2 Camera3D::unproject_position(const Vector3 &p_pos) const {
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector2(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector2(), "Camera has no viewport.");
 
 	Size2 viewport_size = get_viewport()->get_visible_rect().size;
 
@@ -521,7 +527,7 @@ Point2 Camera3D::unproject_position(const Vector3 &p_pos) const {
 }
 
 Vector3 Camera3D::project_position(const Point2 &p_point, real_t p_z_depth) const {
-	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Vector3(), "Camera is not inside scene.");
+	ERR_FAIL_COND_V_MSG(!get_viewport(), Vector3(), "Camera has no viewport.");
 
 	if (p_z_depth == 0 && mode != PROJECTION_ORTHOGONAL) {
 		return get_global_transform().origin;

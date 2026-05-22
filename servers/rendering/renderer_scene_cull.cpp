@@ -3153,6 +3153,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	Vector3 camera_position = p_camera_data->main_transform.origin;
 
 	ERR_FAIL_COND(p_render_buffers.is_null());
+	ERR_FAIL_COND(scenario == nullptr);
 
 	render_pass++;
 

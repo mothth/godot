@@ -1251,8 +1251,7 @@ void CPUParticles3D::_update_particle_data_buffer() {
 			SortArray<int, SortLifetime> sorter;
 			sorter.compare.particles = r;
 			sorter.sort(order, pc);
-		} else if (draw_order == DRAW_ORDER_VIEW_DEPTH) {
-			ERR_FAIL_NULL(get_viewport());
+		} else if (draw_order == DRAW_ORDER_VIEW_DEPTH && get_viewport()) {
 			Camera3D *c = get_viewport()->get_camera_3d();
 			if (c) {
 				Vector3 dir = c->get_global_transform().basis.get_column(2); //far away to close

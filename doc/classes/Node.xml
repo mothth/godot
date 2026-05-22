@@ -814,6 +814,14 @@
 				Calls [method Object.notification] with [param what] on this node and all of its children, recursively.
 			</description>
 		</method>
+		<method name="propagate_notification_in_tree">
+			<return type="void" />
+			<param index="0" name="what" type="int" />
+			<description>
+				Calls [method Object.notification] with [param what] on this node and all of its children recursively, as long as they are within the scene tree.
+				Otherwise, the propagation will not travel further down the branch.
+			</description>
+		</method>
 		<method name="queue_accessibility_update">
 			<return type="void" />
 			<description>
@@ -1226,6 +1234,14 @@
 		</constant>
 		<constant name="NOTIFICATION_ENABLED" value="29">
 			Notification received when the node is enabled again after being disabled. See [constant PROCESS_MODE_DISABLED].
+		</constant>
+		<constant name="NOTIFICATION_ENTER_VIEWPORT" value="500">
+			Notification received when the node enters a viewport.
+			This primarily happens upon entering the tree, but some nodes such as [SubWorld] can switch the viewport of its children without leaving the tree.
+		</constant>
+		<constant name="NOTIFICATION_EXIT_VIEWPORT" value="501">
+			Notification received when the node exits a viewport.
+			This primarily happens upon exiting the tree, but some nodes such as [SubWorld] can switch the viewport of its children without leaving the tree.
 		</constant>
 		<constant name="NOTIFICATION_RESET_PHYSICS_INTERPOLATION" value="2001">
 			Notification received when [method reset_physics_interpolation] is called on the node or its ancestors.

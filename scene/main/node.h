@@ -43,6 +43,7 @@ class Window;
 class SceneState;
 class Tween;
 class PropertyTweener;
+class SubWorld;
 
 SAFE_FLAG_TYPE_PUN_GUARANTEES
 SAFE_NUMERIC_TYPE_PUN_GUARANTEES(uint32_t)
@@ -328,6 +329,7 @@ private:
 	Error _rpc_id_bind(const Variant **p_args, int p_argcount, Callable::CallError &r_error);
 
 	friend class SceneTree;
+	friend class SubWorld; // SubWorld needs to be able to change its viewport, it's easier to just do this
 
 	void _set_tree(SceneTree *p_tree);
 	void _propagate_pause_notification(bool p_enable);
@@ -448,6 +450,8 @@ protected:
 public:
 	enum {
 		// You can make your own, but don't use the same numbers as other notifications in other nodes.
+		// Incandescence - At least list the taken ones here as comments??? raghhh
+		// Update: It appears 30-36 and 40-51 are taken.
 		NOTIFICATION_ENTER_TREE = 10,
 		NOTIFICATION_EXIT_TREE = 11,
 		NOTIFICATION_MOVED_IN_PARENT = 12,
@@ -468,6 +472,8 @@ public:
 		NOTIFICATION_POST_ENTER_TREE = 27,
 		NOTIFICATION_DISABLED = 28,
 		NOTIFICATION_ENABLED = 29,
+		NOTIFICATION_EXIT_VIEWPORT = 500,
+		NOTIFICATION_ENTER_VIEWPORT = 501,
 		NOTIFICATION_RESET_PHYSICS_INTERPOLATION = 2001, // A GodotSpace Odyssey.
 		// Keep these linked to Node.
 
@@ -638,6 +644,7 @@ public:
 	/* NOTIFICATIONS */
 
 	void propagate_notification(int p_notification);
+	void propagate_notification_in_tree(int p_notification);
 
 	void propagate_call(const StringName &p_method, const Array &p_args = Array(), const bool p_parent_first = false);
 

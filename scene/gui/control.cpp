@@ -684,7 +684,7 @@ Control *Control::get_root_parent_control() const {
 
 Rect2 Control::get_parent_anchorable_rect() const {
 	ERR_READ_THREAD_GUARD_V(Rect2());
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return Rect2();
 	}
 
@@ -729,7 +729,7 @@ void Control::_update_canvas_item_transform() {
 	xform[2] += get_position();
 
 	// We use a little workaround to avoid flickering when moving the pivot with _edit_set_pivot()
-	if (is_inside_tree() && Math::abs(Math::sin(data.rotation * 4.0f)) < 0.00001f && get_viewport()->is_snap_controls_to_pixels_enabled()) {
+	if (get_viewport() && Math::abs(Math::sin(data.rotation * 4.0f)) < 0.00001f && get_viewport()->is_snap_controls_to_pixels_enabled()) {
 		xform[2] = (xform[2] + Vector2(0.5, 0.5)).floor();
 	}
 
@@ -1886,14 +1886,14 @@ void Control::_call_gui_input(const Ref<InputEvent> &p_event) {
 	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
 		emit_signal(SceneStringName(gui_input), p_event); // Signal should be first, so it's possible to override an event (and then accept it).
 	}
-	if (!is_inside_tree() || get_viewport()->is_input_handled()) {
+	if (!get_viewport() || get_viewport()->is_input_handled()) {
 		return; // Input was handled, abort.
 	}
 
 	if (p_event->get_device() != InputEvent::DEVICE_ID_INTERNAL) {
 		GDVIRTUAL_CALL(_gui_input, p_event);
 	}
-	if (!is_inside_tree() || get_viewport()->is_input_handled()) {
+	if (!get_viewport() || get_viewport()->is_input_handled()) {
 		return; // Input was handled, abort.
 	}
 	gui_input(p_event);
@@ -1904,7 +1904,7 @@ void Control::gui_input(const Ref<InputEvent> &p_event) {
 
 void Control::accept_event() {
 	ERR_MAIN_THREAD_GUARD;
-	if (is_inside_tree()) {
+	if (get_viewport()) {
 		get_viewport()->_gui_accept_event();
 	}
 }
@@ -2015,7 +2015,7 @@ bool Control::is_force_pass_scroll_events() const {
 
 void Control::warp_mouse(const Point2 &p_position) {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 	get_viewport()->warp_mouse(get_global_transform_with_canvas().xform(p_position));
 }
 
@@ -2115,7 +2115,7 @@ void Control::drop_data(const Point2 &p_point, const Variant &p_data) {
 
 void Control::force_drag(const Variant &p_data, Control *p_control) {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 	ERR_FAIL_COND(p_data.get_type() == Variant::NIL);
 
 	Viewport *vp = get_viewport();
@@ -2126,7 +2126,7 @@ void Control::force_drag(const Variant &p_data, Control *p_control) {
 
 void Control::accessibility_drag() {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 
 	Viewport *vp = get_viewport();
 
@@ -2146,7 +2146,7 @@ void Control::accessibility_drag() {
 
 void Control::accessibility_drop() {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 	ERR_FAIL_COND(!get_viewport()->gui_is_dragging());
 
 	get_viewport()->gui_perform_drop_at(Vector2(Math::INF, Math::INF), this);
@@ -2250,14 +2250,14 @@ TypedArray<NodePath> Control::get_accessibility_flow_to_nodes() const {
 
 void Control::set_drag_preview(Control *p_control) {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 	ERR_FAIL_COND(!get_viewport()->gui_is_dragging());
 	get_viewport()->_gui_set_drag_preview(this, p_control);
 }
 
 bool Control::is_drag_successful() const {
 	ERR_READ_THREAD_GUARD_V(false);
-	return is_inside_tree() && get_viewport()->gui_is_drag_successful();
+	return get_viewport() && get_viewport()->gui_is_drag_successful();
 }
 
 // Focus.
@@ -2266,7 +2266,7 @@ void Control::set_focus_mode(FocusMode p_focus_mode) {
 	ERR_MAIN_THREAD_GUARD;
 	ERR_FAIL_INDEX((int)p_focus_mode, 4);
 
-	if (is_inside_tree() && p_focus_mode == FOCUS_NONE && data.focus_mode != FOCUS_NONE && has_focus()) {
+	if (get_viewport() && p_focus_mode == FOCUS_NONE && data.focus_mode != FOCUS_NONE && has_focus()) {
 		release_focus();
 	}
 
@@ -2355,12 +2355,12 @@ void Control::_propagate_focus_behavior_recursive_recursively(bool p_enabled, bo
 
 bool Control::has_focus(bool p_ignore_hidden_focus) const {
 	ERR_READ_THREAD_GUARD_V(false);
-	return is_inside_tree() && get_viewport()->_gui_control_has_focus(this, p_ignore_hidden_focus);
+	return get_viewport() && get_viewport()->_gui_control_has_focus(this, p_ignore_hidden_focus);
 }
 
 void Control::grab_focus(bool p_hide_focus) {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 
 	if (get_focus_mode_with_override() == FOCUS_ACCESSIBILITY) {
 		if (!get_tree()->is_accessibility_enabled()) {
@@ -2379,14 +2379,14 @@ void Control::grab_focus(bool p_hide_focus) {
 
 void Control::grab_click_focus() {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 
 	get_viewport()->_gui_grab_click_focus(this);
 }
 
 void Control::release_focus() {
 	ERR_MAIN_THREAD_GUARD;
-	ERR_FAIL_COND(!is_inside_tree());
+	ERR_FAIL_COND(!get_viewport());
 
 	if (!has_focus()) {
 		return;
@@ -2881,7 +2881,7 @@ void Control::set_default_cursor_shape(CursorShape p_shape) {
 	}
 	data.default_cursor = p_shape;
 
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 	if (!get_global_rect().has_point(get_global_mouse_position())) {
@@ -3770,7 +3770,7 @@ void Control::_notification(int p_notification) {
 			DisplayServer::get_singleton()->accessibility_update_add_action(ae, DisplayServer::AccessibilityAction::ACTION_SHOW_TOOLTIP, callable_mp(this, &Control::_accessibility_action_show_tooltip));
 			DisplayServer::get_singleton()->accessibility_update_add_action(ae, DisplayServer::AccessibilityAction::ACTION_HIDE_TOOLTIP, callable_mp(this, &Control::_accessibility_action_hide_tooltip));
 			DisplayServer::get_singleton()->accessibility_update_add_action(ae, DisplayServer::AccessibilityAction::ACTION_SCROLL_INTO_VIEW, callable_mp(this, &Control::_accessibility_action_scroll_into_view));
-			if (is_inside_tree() && get_viewport()->gui_is_dragging()) {
+			if (get_viewport() && get_viewport()->gui_is_dragging()) {
 				if (can_drop_data(Vector2(Math::INF, Math::INF), get_viewport()->gui_get_drag_data())) {
 					DisplayServer::get_singleton()->accessibility_update_set_extra_info(ae, vformat(RTR("%s can be dropped here. Use %s to drop, use %s to cancel."), get_viewport()->gui_get_drag_description(), InputMap::get_singleton()->get_action_description("ui_accessibility_drag_and_drop"), InputMap::get_singleton()->get_action_description("ui_cancel")));
 				} else {
@@ -3857,7 +3857,9 @@ void Control::_notification(int p_notification) {
 
 		case NOTIFICATION_EXIT_TREE: {
 			set_theme_context(nullptr, false);
+		} break;
 
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			release_focus();
 			get_viewport()->_gui_remove_control(this);
 		} break;
@@ -3972,7 +3974,7 @@ void Control::_notification(int p_notification) {
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
 			if (!is_visible_in_tree()) {
-				if (get_viewport() != nullptr) {
+				if (get_viewport()) {
 					get_viewport()->_gui_hide_control(this);
 				}
 			} else {

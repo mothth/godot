@@ -52,6 +52,7 @@ class Node3D : public Node {
 
 	friend class SceneTreeFTI;
 	friend class SceneTreeFTITests;
+	friend class SubWorld; // To access world_3d
 
 public:
 	static constexpr AncestralClass static_ancestral_class = AncestralClass::NODE_3D;
@@ -124,6 +125,7 @@ private:
 		mutable MTNumeric<uint32_t> dirty;
 
 		Viewport *viewport = nullptr;
+		Ref<World3D> world_3d;
 
 		bool top_level : 1;
 		bool inside_world : 1;

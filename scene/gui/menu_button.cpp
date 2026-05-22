@@ -157,15 +157,17 @@ void MenuButton::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			MenuButton *menu_btn_other = Object::cast_to<MenuButton>(get_viewport()->gui_get_hovered_control());
+			if (get_viewport()) {
+				MenuButton *menu_btn_other = Object::cast_to<MenuButton>(get_viewport()->gui_get_hovered_control());
 
-			if (menu_btn_other && menu_btn_other != this && menu_btn_other->is_switch_on_hover() && !menu_btn_other->is_disabled() &&
-					(get_parent()->is_ancestor_of(menu_btn_other) || menu_btn_other->get_parent()->is_ancestor_of(popup))) {
-				popup->hide();
+				if (menu_btn_other && menu_btn_other != this && menu_btn_other->is_switch_on_hover() && !menu_btn_other->is_disabled() &&
+						(get_parent()->is_ancestor_of(menu_btn_other) || menu_btn_other->get_parent()->is_ancestor_of(popup))) {
+					popup->hide();
 
-				menu_btn_other->pressed();
-				// As the popup wasn't triggered by a mouse click, the item focus needs to be removed manually.
-				menu_btn_other->get_popup()->set_focused_item(-1);
+					menu_btn_other->pressed();
+					// As the popup wasn't triggered by a mouse click, the item focus needs to be removed manually.
+					menu_btn_other->get_popup()->set_focused_item(-1);
+				}
 			}
 		} break;
 	}

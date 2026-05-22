@@ -168,7 +168,7 @@ Vector2 CanvasLayer::get_scale() const {
 
 void CanvasLayer::_notification(int p_what) {
 	switch (p_what) {
-		case NOTIFICATION_ENTER_TREE: {
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			if (custom_viewport && ObjectDB::get_instance(custom_viewport_id)) {
 				vp = custom_viewport;
 			} else {
@@ -189,7 +189,7 @@ void CanvasLayer::_notification(int p_what) {
 			}
 		} break;
 
-		case NOTIFICATION_EXIT_TREE: {
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			ERR_FAIL_NULL_MSG(vp, "Viewport is not initialized.");
 			get_parent()->disconnect(SNAME("child_order_changed"), callable_mp(vp, &Viewport::canvas_parent_mark_dirty).bind(get_parent()));
 
@@ -224,7 +224,7 @@ RID CanvasLayer::get_viewport() const {
 
 void CanvasLayer::set_custom_viewport(Node *p_viewport) {
 	ERR_FAIL_NULL_MSG(p_viewport, "Cannot set viewport to nullptr.");
-	if (is_inside_tree()) {
+	if (Node::get_viewport()) {
 		vp->_canvas_layer_remove(this);
 		RenderingServer::get_singleton()->viewport_remove_canvas(viewport, canvas);
 		viewport = RID();
@@ -245,12 +245,14 @@ void CanvasLayer::set_custom_viewport(Node *p_viewport) {
 			vp = Node::get_viewport();
 		}
 
-		vp->_canvas_layer_add(this);
-		viewport = vp->get_viewport_rid();
+		if (vp) {
+			vp->_canvas_layer_add(this);
+			viewport = vp->get_viewport_rid();
 
-		RenderingServer::get_singleton()->viewport_attach_canvas(viewport, canvas);
-		RenderingServer::get_singleton()->viewport_set_canvas_stacking(viewport, canvas, layer, get_index());
-		RenderingServer::get_singleton()->viewport_set_canvas_transform(viewport, canvas, transform);
+			RenderingServer::get_singleton()->viewport_attach_canvas(viewport, canvas);
+			RenderingServer::get_singleton()->viewport_set_canvas_stacking(viewport, canvas, layer, get_index());
+			RenderingServer::get_singleton()->viewport_set_canvas_transform(viewport, canvas, transform);
+		}
 	}
 }
 

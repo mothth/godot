@@ -85,7 +85,7 @@ void AudioListener2D::_notification(int p_what) {
 
 void AudioListener2D::make_current() {
 	current = true;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 	get_viewport()->_audio_listener_2d_set(this);
@@ -93,14 +93,14 @@ void AudioListener2D::make_current() {
 
 void AudioListener2D::clear_current() {
 	current = false;
-	if (!is_inside_tree()) {
+	if (!get_viewport()) {
 		return;
 	}
 	get_viewport()->_audio_listener_2d_remove(this);
 }
 
 bool AudioListener2D::is_current() const {
-	if (is_inside_tree() && !is_part_of_edited_scene()) {
+	if (get_viewport() && !is_part_of_edited_scene()) {
 		return get_viewport()->get_audio_listener_2d() == this;
 	} else {
 		return current;

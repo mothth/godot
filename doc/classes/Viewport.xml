@@ -510,6 +510,9 @@
 		<member name="world_3d" type="World3D" setter="set_world_3d" getter="get_world_3d">
 			The custom [World3D] which can be used as 3D environment source.
 		</member>
+		<member name="priority" type="int" setter="set_priority" getter="get_priority">
+			Sets the rendering priority for the viewport. Larger values are rendered earlier than those with smaller values. Parents are still always rendered before children.
+		</member>
 	</members>
 	<signals>
 		<signal name="gui_focus_changed">
@@ -522,6 +525,11 @@
 		<signal name="size_changed">
 			<description>
 				Emitted when the size of the viewport is changed, whether by resizing of window, or some other means.
+			</description>
+		</signal>
+		<signal name="world_3d_changed">
+			<description>
+				Emitted when the associated [World3D] of the viewport is changed.
 			</description>
 		</signal>
 	</signals>

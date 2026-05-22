@@ -3607,10 +3607,13 @@ void Node3DEditorViewport::_notification(int p_what) {
 			surface->connect(SceneStringName(focus_entered), callable_mp(this, &Node3DEditorViewport::_surface_focus_enter));
 			surface->connect(SceneStringName(focus_exited), callable_mp(this, &Node3DEditorViewport::_surface_focus_exit));
 
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			_init_gizmo_instance(index);
 		} break;
 
-		case NOTIFICATION_EXIT_TREE: {
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			_finish_gizmo_instances();
 		} break;
 
@@ -6943,7 +6946,7 @@ void Node3DEditor::update_all_gizmos(Node *p_node) {
 
 Object *Node3DEditor::_get_editor_data(Object *p_what) {
 	Node3D *sp = Object::cast_to<Node3D>(p_what);
-	if (!sp) {
+	if (!sp || !sp->get_world_3d().is_valid()) {
 		return nullptr;
 	}
 
@@ -8991,11 +8994,14 @@ void Node3DEditor::_notification(int p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			_update_theme();
 			_register_all_gizmos();
+		} break;
+
+		case NOTIFICATION_ENTER_VIEWPORT: {
 			_init_indicators();
 			update_all_gizmos();
 		} break;
 
-		case NOTIFICATION_EXIT_TREE: {
+		case NOTIFICATION_EXIT_VIEWPORT: {
 			_finish_indicators();
 		} break;
 
