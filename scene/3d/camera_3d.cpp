@@ -223,6 +223,7 @@ void Camera3D::_notification(int p_what) {
 			}
 		} break;
 
+		case NOTIFICATION_EXIT_VIEWPORT: 
 		case NOTIFICATION_EXIT_WORLD: {
 			if (!is_part_of_edited_scene()) {
 				if (is_current()) {
@@ -233,10 +234,7 @@ void Camera3D::_notification(int p_what) {
 					current = false;
 				}
 			}
-		}
 
-		// fallthrough
-		case NOTIFICATION_EXIT_VIEWPORT: {
 			if (viewport) {
 #ifdef TOOLS_ENABLED
 				if (Engine::get_singleton()->is_editor_hint()) {
@@ -249,15 +247,15 @@ void Camera3D::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_BECAME_CURRENT: {
-			if (viewport) {
-				viewport->find_world_3d()->_register_camera(this);
+			if (is_inside_world()) {
+				get_world_3d()->_register_camera(this);
 			}
 			_update_process_mode();
 		} break;
 
 		case NOTIFICATION_LOST_CURRENT: {
-			if (viewport) {
-				viewport->find_world_3d()->_remove_camera(this);
+			if (is_inside_world()) {
+				get_world_3d()->_remove_camera(this);
 			}
 			_update_process_mode();
 		} break;

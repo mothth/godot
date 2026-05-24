@@ -349,10 +349,9 @@ void Node::_propagate_enter_tree() {
 		data.depth = 1;
 	}
 
-	Viewport *parent_viewport = data.parent ? data.parent->data.viewport : nullptr;
 	data.viewport = Object::cast_to<Viewport>(this);
 	if (!data.viewport && !Object::cast_to<SubWorld>(this)) {
-		data.viewport = parent_viewport;
+		data.viewport = data.parent ? data.parent->data.viewport : nullptr;
 	}
 
 	for (KeyValue<StringName, GroupData> &E : data.grouped) {
@@ -360,11 +359,7 @@ void Node::_propagate_enter_tree() {
 	}
 
 	notification(NOTIFICATION_ENTER_TREE);
-
-	// We check that both our viewport and the parent viewport are valid as
-	// Viewport should only receive the notification if it has a parent viewport,
-	// but SubWorld only receives these notifications when it changes its own viewports with no regard of the parent.
-	if (data.viewport && parent_viewport) {
+	if (data.viewport != nullptr) {
 		notification(NOTIFICATION_ENTER_VIEWPORT);
 	}
 
@@ -437,10 +432,11 @@ void Node::_propagate_exit_tree() {
 
 	emit_signal(SceneStringName(tree_exiting));
 
-	notification(NOTIFICATION_EXIT_TREE, true);
-	if (data.viewport && data.parent && data.parent->data.viewport) {
+	if (data.viewport) {
+		// This should happen before EXIT_TREEZ
 		notification(NOTIFICATION_EXIT_VIEWPORT, true);
 	}
+	notification(NOTIFICATION_EXIT_TREE, true);
 
 	if (data.tree) {
 		data.tree->node_removed(this);

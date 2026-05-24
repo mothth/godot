@@ -568,19 +568,36 @@ void Viewport::_on_settings_changed() {
 	}
 }
 
+void Viewport::_find_parent() {
+	if (get_parent()) {
+		parent = get_parent()->get_viewport();
+		if (parent == this || parent == nullptr) {
+			// SubWorld case
+			Node *node_parent = get_parent();
+			while (node_parent) {
+				SubWorld *sub_world = Object::cast_to<SubWorld>(node_parent);
+				if (sub_world) {
+					parent = sub_world->get_parent()->get_viewport();
+					break;
+				}
+				node_parent = node_parent->get_parent();
+			}
+		} 
+		else if (parent != nullptr) {
+			RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, parent->get_viewport_rid());
+		}
+	} else {
+		parent = nullptr;
+	}
+}
+
 void Viewport::_notification(int p_what) {
 	ERR_MAIN_THREAD_GUARD;
 
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			_update_viewport_path();
-
-			if (get_parent()) {
-				parent = get_parent()->get_viewport();
-				RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, parent->get_viewport_rid());
-			} else {
-				parent = nullptr;
-			}
+			_find_parent();
 
 			current_canvas = find_world_2d()->get_canvas();
 			RenderingServer::get_singleton()->viewport_attach_canvas(viewport, current_canvas);
@@ -688,16 +705,28 @@ void Viewport::_notification(int p_what) {
 
 		case NOTIFICATION_ENTER_VIEWPORT: {
 			if (!parent) {
-				if (get_parent()) {
-					parent = get_parent()->get_viewport();
-					RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, parent->get_viewport_rid());
-				} else {
-					parent = nullptr;
+				_find_parent();
+				if (parent && !world_3d.is_valid() && !own_world_3d.is_valid()) {
+					Ref<World3D> world = parent->find_world_3d();
+					if (world.is_valid()) {
+						RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
+						world->_register_viewport(this);
+						_update_audio_listener_3d();
+					}
 				}
 			}
 		} break;
 
 		case NOTIFICATION_EXIT_VIEWPORT: {
+			if (parent) {
+				if (!world_3d.is_valid() && !own_world_3d.is_valid()) {
+					Ref<World3D> parent_world = parent->find_world_3d();
+					if (parent_world.is_valid()) {
+						parent_world->_remove_viewport(this);
+					}
+				}
+				parent = nullptr;
+			}		
 			RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, RID());
 		} break;
 
@@ -858,6 +887,9 @@ void Viewport::_process_picking() {
 			Viewport *vp = this;
 			while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 				vp = vp->get_parent()->get_viewport();
+				if (vp == this) {
+					break;
+				}
 			}
 			if (vp) {
 				vp->local_input_handled = false;
@@ -3508,6 +3540,9 @@ void Viewport::push_input(RequiredParam<InputEvent> rp_event, bool p_local_coord
 		Viewport *vp = this;
 		while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
+			if (vp == this) {
+				break;
+			}
 		}
 		if (vp) {
 			vp->local_input_handled = false;
@@ -3959,6 +3994,9 @@ void Viewport::set_input_as_handled() {
 		Viewport *vp = this;
 		while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
+			if (vp == this) {
+				break;
+			}
 		}
 		if (vp && vp != this) {
 			vp->set_input_as_handled();
@@ -3976,6 +4014,9 @@ bool Viewport::is_input_handled() const {
 		const Viewport *vp = this;
 		while (vp && !Object::cast_to<Window>(vp) && vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
+			if (vp == this) {
+				break;
+			}
 		}
 		if (vp && vp != this) {
 			return vp->is_input_handled();
@@ -4128,7 +4169,9 @@ Viewport *Viewport::get_parent_viewport() const {
 		return nullptr; //root viewport
 	}
 
-	return get_parent()->get_viewport();
+	Viewport *_parent = get_parent()->get_viewport();
+	// return get_parent()->get_viewport();
+	return _parent != this ? _parent : nullptr;
 }
 
 void Viewport::set_embedding_subwindows(bool p_embed) {
@@ -4150,7 +4193,7 @@ void Viewport::set_embedding_subwindows(bool p_embed) {
 		Viewport *vp = this;
 		while (vp->get_parent()) {
 			vp = vp->get_parent()->get_viewport();
-			if (!vp) { break; }
+			if (!vp || vp == this) { break; }
 			else if (vp->is_embedding_subwindows()) {
 				for (int i = 0; i < vp->gui.sub_windows.size(); i++) {
 					if (is_ancestor_of(vp->gui.sub_windows[i].window)) {

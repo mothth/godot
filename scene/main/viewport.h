@@ -327,6 +327,7 @@ private:
 	HashSet<ViewportTexture *> viewport_textures;
 
 	void _update_viewport_path();
+	void _find_parent();
 
 	bool _can_hide_focus_state();
 	void _on_settings_changed();

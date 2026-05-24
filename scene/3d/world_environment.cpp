@@ -37,7 +37,8 @@
 void WorldEnvironment::_notification(int p_what) {
 	switch (p_what) {
 		case Node3D::NOTIFICATION_ENTER_WORLD:
-		case Node3D::NOTIFICATION_ENTER_TREE: {
+		case Node3D::NOTIFICATION_ENTER_TREE:
+		case Node3D::NOTIFICATION_ENTER_VIEWPORT: {
 
 			// Find world 3D
 			if (!world_3d.is_valid()) {
@@ -66,7 +67,8 @@ void WorldEnvironment::_notification(int p_what) {
 		} break;
 
 		case Node3D::NOTIFICATION_EXIT_WORLD:
-		case Node3D::NOTIFICATION_EXIT_TREE: {
+		case Node3D::NOTIFICATION_EXIT_TREE:
+		case Node3D::NOTIFICATION_EXIT_VIEWPORT: {
 			if (world_3d.is_valid()) {
 				if (environment.is_valid()) {
 					remove_from_group("_world_environment_" + itos(world_3d->get_scenario().get_id()));

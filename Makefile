@@ -8,10 +8,17 @@ PROFILE = /home/lantern/Projects/the-story-machine/build.gdbuild
 REMOVE_MODULES = module_fbx_enabled=no module_mobile_vr_enabled=no module_multiplayer_enabled=no module_webrtc_enabled=no module_websocket_enabled=no module_webxr_enabled=no
 RELEASE_FLAGS = target=template_release production=yes arch=x86_64 lto=full build_profile=$(PROFILE) $(REMOVE_MODULES)
 
+TRACY_PATH = /home/lantern/src/tracy
+
 .PHONY: build release-linux release-windows release compile_commands.json
 
 build:
 	scons platform=linuxbsd compiledb=yes debug_symbols=yes
+	mv $(EXPORT_TEMPLATES)/$(VERSION)/linux_release.x86_64 $(EXPORT_TEMPLATES)/$(VERSION)/old.linux_release.x86_64
+	mv $(EXPORT_TEMPLATES)/$(VERSION)/windows_release.x86_64.exe $(EXPORT_TEMPLATES)/$(VERSION)/old.windows_release.x86_64.exe
+
+profiler:
+	scons platform=linuxbsd compiledb=yes debug_symbols=yes profiler=tracy profiler_path=$(TRACY_PATH)
 	mv $(EXPORT_TEMPLATES)/$(VERSION)/linux_release.x86_64 $(EXPORT_TEMPLATES)/$(VERSION)/old.linux_release.x86_64
 	mv $(EXPORT_TEMPLATES)/$(VERSION)/windows_release.x86_64.exe $(EXPORT_TEMPLATES)/$(VERSION)/old.windows_release.x86_64.exe
 

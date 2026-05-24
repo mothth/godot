@@ -239,30 +239,31 @@ void Node3D::_notification(int p_what) {
 		case NOTIFICATION_ENTER_WORLD: {
 			ERR_MAIN_THREAD_GUARD;
 
-			data.inside_world = true;
+			// data.inside_world = true;
+			data.viewport = nullptr;
+			data.world_3d = nullptr;
 
-			// Get viewport and World3D
-			data.viewport = get_viewport();
-			if (!data.world_3d.is_valid() && get_viewport()) {
-				data.world_3d = get_viewport()->find_world_3d();
-			}
-
-			// Look for World3D if we still don't have it
-			if (!data.world_3d.is_valid()) {
-				if (data.parent && data.parent->data.world_3d.is_valid()) {
-					data.world_3d = data.parent->data.world_3d;
-				} else {
-					Node *parent = get_parent();
-					while (parent) {
-						SubWorld *sub_world = Object::cast_to<SubWorld>(parent);
-						if (sub_world) {
-							data.viewport = sub_world->get_viewport();
-							data.world_3d = sub_world->find_world_3d();
-							break;
-						}
-
-						parent = parent->get_parent();
+			if (data.parent && data.parent->data.world_3d.is_valid()) {
+				data.world_3d = data.parent->data.world_3d;
+				data.viewport = data.parent->data.viewport;
+			} else {
+				Node *parent = get_parent();
+				while (parent) {
+					SubWorld *sub_world = Object::cast_to<SubWorld>(parent);
+					if (sub_world) {
+						data.viewport = sub_world->get_viewport();
+						data.world_3d = sub_world->find_world_3d();
+						break;
 					}
+
+					Viewport *viewport = Object::cast_to<Viewport>(parent);
+					if (viewport) {
+						data.viewport = viewport;
+						data.world_3d = viewport->find_world_3d();
+						break;
+					}
+
+					parent = parent->get_parent();
 				}
 			}
 
@@ -292,7 +293,7 @@ void Node3D::_notification(int p_what) {
 			}
 
 			data.world_3d = Ref<World3D>();
-			data.inside_world = false;
+			// data.inside_world = false;
 		} break;
 
 		case NOTIFICATION_ENTER_VIEWPORT: {
@@ -1587,7 +1588,7 @@ Node3D::Node3D() :
 	// Default member initializer for bitfield is a C++20 extension, so:
 
 	data.top_level = false;
-	data.inside_world = false;
+	// data.inside_world = false;
 
 	data.ignore_notification = false;
 	data.notify_local_transform = false;

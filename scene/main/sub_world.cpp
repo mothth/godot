@@ -7,6 +7,7 @@
 
 #include "scene/main/viewport.h"
 #include "scene/resources/world_2d.h"
+#include "core/profiling/profiling.h"
 
 #ifndef _3D_DISABLED
 #include "scene/resources/3d/world_3d.h"
@@ -38,8 +39,12 @@ void SubWorld::_notification(int p_what) {
 	switch (p_what) {
 
 		case NOTIFICATION_ENTER_TREE: {
-			data.viewport = nullptr;
-
+#ifdef TOOLS_ENABLED
+			if (data.tree->get_edited_scene_root() == this) {
+				current_world_3d = get_parent()->get_viewport()->find_world_3d();
+				current_world_3d->_register_sub_world(this);
+			} else
+#endif // TOOLS_ENABLED
 			if (world_3d.is_valid()) {
 				current_world_3d = world_3d;
 				current_world_3d->_register_sub_world(this);
@@ -62,46 +67,51 @@ void SubWorld::_notification(int p_what) {
 }
 
 void SubWorld::_change_viewport(Viewport *p_viewport) {
+	GodotProfileZone("SubWorld::_change_viewport");
+	
 	if (data.viewport) {
 #ifndef _3D_DISABLED
 		data.viewport->disconnect(SNAME("world_3d_changed"), callable_mp(this, &SubWorld::_viewport_changed_world_3d));
 #endif // _3D_DISABLED
-		data.viewport->disconnect(SNAME("tree_exiting"), callable_mp(this, &SubWorld::_viewport_changed_world_3d));
-
-		propagate_notification_in_tree(NOTIFICATION_EXIT_VIEWPORT);
+		data.viewport->disconnect(SNAME("tree_exiting"), callable_mp(this, &SubWorld::_viewport_exited));
 	}
 
-	_propagate_change_viewport(this, p_viewport);
-	emit_signal(SNAME("viewport_changed"));
+	if (is_inside_tree()) {
+		_propagate_change_viewport(this, p_viewport);
+		emit_signal(SNAME("viewport_changed"));
 
-	if (p_viewport) {
+		if (p_viewport) {
 #ifndef _3D_DISABLED
-		data.viewport->connect(SNAME("world_3d_changed"), callable_mp(this, &SubWorld::_viewport_changed_world_3d));
+			data.viewport->connect(SNAME("world_3d_changed"), callable_mp(this, &SubWorld::_viewport_changed_world_3d));
 #endif // _3D_DISABLED
-		data.viewport->connect(SNAME("tree_exiting"), callable_mp(this, &SubWorld::_viewport_changed_world_3d));
-
-		propagate_notification_in_tree(NOTIFICATION_ENTER_VIEWPORT);
-		if (!world_3d.is_valid()) {
-			_viewport_changed_world_3d();
+			data.viewport->connect(SNAME("tree_exiting"), callable_mp(this, &SubWorld::_viewport_exited));
+			if (!world_3d.is_valid()) {
+				_viewport_changed_world_3d();
+			}
 		}
 	}
 }
 
 void SubWorld::_update_viewport() {
+	GodotProfileZone("SubWorld::_update_viewport");
+
 	Viewport *vp = nullptr;
 
 	if (is_inside_tree()) {
 
-		if (force_viewport) {
-			vp = force_viewport;
+#ifdef TOOLS_ENABLED
+		// Always display with parent viewport if we are the root node of a scene in the editor
+		if (data.tree->get_edited_scene_root() == this) {
+			vp = data.parent->data.viewport;
+		} else
+#endif // TOOLS_ENABLED
 
+		if (force_viewport
 #ifndef _3D_DISABLED
-			if (world_3d.is_valid() && vp->find_world_3d() != world_3d) {
-				// Should throw an error maybe?
-				vp = nullptr;
-			}
+			&& (!world_3d.is_valid() || force_viewport->find_world_3d() == world_3d)
 #endif // _3D_DISABLED
-
+		) {
+			vp = force_viewport;
 		}
 
 #ifndef _3D_DISABLED
@@ -120,8 +130,29 @@ void SubWorld::_update_viewport() {
 	}
 }
 
+void SubWorld::_viewport_exited() {
+	data.viewport->connect(SNAME("tree_exited"), callable_mp(this, &SubWorld::_update_viewport), CONNECT_ONE_SHOT);
+	_change_viewport(nullptr);
+}
+
 void SubWorld::_propagate_change_viewport(Node *p_node, Viewport *p_viewport) {
+	if (!p_node->is_inside_tree()) {
+		return;
+	}
+	else if (Object::cast_to<SubWorld>(p_node) && p_node != this) {
+		return;
+	}
+	else if (Object::cast_to<Viewport>(p_node)) {
+		Viewport *vp = static_cast<Viewport *>(p_node);
+		if (vp->get_parent_viewport()) { p_node->notification(NOTIFICATION_EXIT_VIEWPORT); }
+		if (p_viewport) { p_node->notification(NOTIFICATION_ENTER_VIEWPORT); }
+		return;
+	}
+
+	if (p_node->data.viewport) { p_node->notification(NOTIFICATION_EXIT_VIEWPORT); }
 	p_node->data.viewport = p_viewport;
+	if (p_viewport) { p_node->notification(NOTIFICATION_ENTER_VIEWPORT); }
+
 	for (int i = 0; i < p_node->get_child_count(); i++) {
 		_propagate_change_viewport(p_node->get_child(i), p_viewport);
 	}
@@ -130,12 +161,22 @@ void SubWorld::_propagate_change_viewport(Node *p_node, Viewport *p_viewport) {
 #ifndef _3D_DISABLED
 
 Viewport *SubWorld::_preferred_viewport(Viewport *p_a, Viewport *p_b) {
-	if (!p_a) {
+#ifdef DEBUG_ENABLED
+	if (p_a && !p_a->is_inside_tree()) {
+		WARN_PRINT("Viewport A is not in the tree. (It should NOT be registered in a `World3D`!)");
+	} else if (p_b && !p_b->is_inside_tree()) {
+		WARN_PRINT("Viewport B is not in the tree. (It should NOT be registered in a `World3D`!)");
+	}
+#endif // DEBUG_ENABLED
+
+	if (!p_a || !p_a->is_inside_tree()) {
 		return p_b;
-	} else if (!p_b) {
+	} else if (!p_b || !p_b->is_inside_tree()) {
 		return p_a;
 	} else if (!p_b->get_parent_viewport() && p_a->get_parent_viewport()) {
 		return p_b;
+	} else if (!p_a->get_parent_viewport()) {
+		return p_a;
 	} else if (p_b->get_priority() > p_a->get_priority()) {
 		return p_b;
 	}
@@ -166,6 +207,8 @@ void SubWorld::_new_available_viewport(Viewport *p_viewport) {
 		return;
 	}
 
+	GodotProfileZone("SubWorld::_new_available_viewport");
+
 	Viewport *vp = _preferred_viewport(get_viewport(), p_viewport);
 	if (vp != get_viewport()) {
 		_change_viewport(vp);
@@ -173,6 +216,8 @@ void SubWorld::_new_available_viewport(Viewport *p_viewport) {
 }
 
 void SubWorld::_viewport_changed_world_3d() {
+	GodotProfileZone("SubWorld::_viewport_changed_world_3d");
+
 	if (!is_inside_tree()) {
 		_change_viewport(nullptr);
 		return;
@@ -215,6 +260,7 @@ void SubWorld::_propagate_exit_world_3d(Node *p_node) {
 				if (v->get_world_3d().is_valid() || v->is_using_own_world_3d()) {
 					return;
 				}
+				// v->find_world_3d()->_remove_viewport(v);
 			}
 		}
 	}
@@ -248,6 +294,7 @@ void SubWorld::_propagate_enter_world_3d(Node *p_node) {
 				if (v->get_world_3d().is_valid() || v->is_using_own_world_3d()) {
 					return;
 				}
+				// v->find_world_3d()->_register_viewport(v);
 			}
 		}
 	}
@@ -261,6 +308,13 @@ void SubWorld::set_world_3d(const Ref<World3D> &p_world_3d) {
 	if (p_world_3d == world_3d) {
 		return;
 	}
+	
+#ifdef TOOLS_ENABLED
+	if (is_inside_tree() && data.tree->get_edited_scene_root() == this) {
+		world_3d = p_world_3d;
+		return;
+	} else
+#endif // TOOLS_ENABLED
 
 	if (p_world_3d.is_valid() && p_world_3d == current_world_3d) {
 		world_3d = p_world_3d;

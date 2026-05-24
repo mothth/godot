@@ -36,6 +36,7 @@ protected:
 
 	void _change_viewport(Viewport *p_viewport);
 	void _update_viewport();
+	void _viewport_exited();
 
 	void _propagate_change_viewport(Node *p_node, Viewport *p_viewport);
 

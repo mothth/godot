@@ -1903,10 +1903,14 @@ void Window::_window_drop_files(const Vector<String> &p_files) {
 
 Viewport *Window::get_parent_viewport() const {
 	ERR_READ_THREAD_GUARD_V(nullptr);
-	if (get_parent()) {
-		return get_parent()->get_viewport();
+	if (parent) {
+		return parent;
 	} else {
-		return nullptr;
+		if (get_parent()) {
+			return get_parent()->get_viewport();
+		} else {
+			return nullptr;
+		}
 	}
 }
 

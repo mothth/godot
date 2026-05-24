@@ -128,7 +128,7 @@ private:
 		Ref<World3D> world_3d;
 
 		bool top_level : 1;
-		bool inside_world : 1;
+		// bool inside_world : 1;
 
 		// This is cached, and only currently kept up to date in visual instances.
 		// This is set if a visual instance is (a) in the tree AND (b) visible via is_visible_in_tree() call.
@@ -310,7 +310,7 @@ public:
 	void set_disable_scale(bool p_enabled);
 	bool is_scale_disabled() const;
 
-	_FORCE_INLINE_ bool is_inside_world() const { return data.inside_world; }
+	_FORCE_INLINE_ bool is_inside_world() const { return data.world_3d.is_valid(); }
 
 	Transform3D get_relative_transform(const Node *p_parent) const;
 
