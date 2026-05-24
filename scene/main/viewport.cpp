@@ -583,7 +583,7 @@ void Viewport::_find_parent() {
 				node_parent = node_parent->get_parent();
 			}
 		} 
-		else if (parent != nullptr) {
+		if (parent != nullptr) {
 			RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, parent->get_viewport_rid());
 		}
 	} else {
@@ -608,8 +608,8 @@ void Viewport::_notification(int p_what) {
 #ifndef _3D_DISABLED
 			Ref<World3D> world = find_world_3d();
 			if (world.is_valid()) {
-				RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 				world->_register_viewport(this);
+				RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 				_update_audio_listener_3d();
 			}
 #endif // _3D_DISABLED
@@ -709,8 +709,8 @@ void Viewport::_notification(int p_what) {
 				if (parent && !world_3d.is_valid() && !own_world_3d.is_valid()) {
 					Ref<World3D> world = parent->find_world_3d();
 					if (world.is_valid()) {
-						RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 						world->_register_viewport(this);
+						RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 						_update_audio_listener_3d();
 					}
 				}
@@ -4782,8 +4782,8 @@ void Viewport::set_world_3d(const Ref<World3D> &p_world_3d) {
 
 	world = find_world_3d();
 	if (is_inside_tree() && world.is_valid()) {
-		world->_register_viewport(this);
 		_propagate_enter_world_3d(this);
+		world->_register_viewport(this);
 		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
@@ -4804,8 +4804,8 @@ void Viewport::_own_world_3d_changed() {
 
 	Ref<World3D> world = find_world_3d();
 	if (is_inside_tree() && world.is_valid()) {
-		world->_register_viewport(this);
 		_propagate_enter_world_3d(this);
+		world->_register_viewport(this);
 		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
@@ -4842,8 +4842,8 @@ void Viewport::set_use_own_world_3d(bool p_use_own_world_3d) {
 
 	world = find_world_3d();	
 	if (is_inside_tree() && world.is_valid()) {
-		world->_register_viewport(this);
 		_propagate_enter_world_3d(this);
+		world->_register_viewport(this);
 		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 

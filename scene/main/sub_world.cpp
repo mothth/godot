@@ -169,14 +169,14 @@ Viewport *SubWorld::_preferred_viewport(Viewport *p_a, Viewport *p_b) {
 	}
 #endif // DEBUG_ENABLED
 
-	if (!p_a || !p_a->is_inside_tree()) {
-		return p_b;
-	} else if (!p_b || !p_b->is_inside_tree()) {
+	if (!p_b || !p_b->is_inside_tree() || p_b->is_3d_disabled()) {
 		return p_a;
-	} else if (!p_b->get_parent_viewport() && p_a->get_parent_viewport()) {
+	} else if (!p_a || !p_a->is_inside_tree()) {
 		return p_b;
 	} else if (!p_a->get_parent_viewport()) {
 		return p_a;
+	}  else if (!p_b->get_parent_viewport()) {
+		return p_b;
 	} else if (p_b->get_priority() > p_a->get_priority()) {
 		return p_b;
 	}
