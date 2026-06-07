@@ -79,14 +79,12 @@ private:
 			uint64_t format = 0;
 
 			uint32_t vertex_count = 0;
-			RID vertex_buffer;
 			uint32_t vertex_buffer_size = 0;
-
-			RID attribute_buffer;
 			uint32_t attribute_buffer_size = 0;
-
-			RID skin_buffer;
 			uint32_t skin_buffer_size = 0;
+			RID vertex_buffer;
+			RID attribute_buffer;
+			RID skin_buffer;
 
 			// A different pipeline needs to be allocated
 			// depending on the inputs available in the
@@ -109,21 +107,22 @@ private:
 			Version *versions = nullptr; //allocated on demand
 			uint32_t version_count = 0;
 
-			RID index_buffer;
 			uint32_t index_buffer_size = 0;
-			RID index_array;
 			uint32_t index_count = 0;
+			uint32_t lod_count = 0;
 
+			RID index_buffer;
+			RID index_array;
+			
 			struct LOD {
 				float edge_length = 0.0;
 				uint32_t index_count = 0;
-				RID index_buffer;
 				uint32_t index_buffer_size = 0;
+				RID index_buffer;
 				RID index_array;
 			};
 
 			LOD *lods = nullptr;
-			uint32_t lod_count = 0;
 
 			AABB aabb;
 
@@ -141,12 +140,11 @@ private:
 			RID material;
 
 			uint32_t render_index = 0;
-			uint64_t render_pass = 0;
-
 			uint32_t multimesh_render_index = 0;
-			uint64_t multimesh_render_pass = 0;
-
 			uint32_t particles_render_index = 0;
+
+			uint64_t render_pass = 0;
+			uint64_t multimesh_render_pass = 0;
 			uint64_t particles_render_pass = 0;
 
 			RID uniform_set;

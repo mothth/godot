@@ -108,24 +108,25 @@ private:
 		// Only used with FTI.
 		Transform3D global_transform_interpolated;
 
+		// Only used with FTI.
+		Transform3D local_transform_prev;
+
 		// Current xforms are either
 		// * Used for everything (when not using FTI)
 		// * Correct on the physics tick (when using FTI)
 		mutable Transform3D global_transform;
 		mutable Transform3D local_transform;
 
-		// Only used with FTI.
-		Transform3D local_transform_prev;
-
-		mutable EulerOrder euler_rotation_order = EulerOrder::YXZ;
 		mutable Vector3 euler_rotation;
 		mutable Vector3 scale = Vector3(1, 1, 1);
+		mutable EulerOrder euler_rotation_order = EulerOrder::YXZ;
 		mutable RotationEditMode rotation_edit_mode = ROTATION_EDIT_MODE_EULER;
-
 		mutable MTNumeric<uint32_t> dirty;
 
 		Viewport *viewport = nullptr;
 		Ref<World3D> world_3d;
+
+		uint32_t index_in_parent = UINT32_MAX;
 
 		bool top_level : 1;
 		// bool inside_world : 1;
@@ -151,6 +152,14 @@ private:
 		bool fti_is_identity_xform : 1;
 		bool fti_processed : 1;
 
+#ifdef TOOLS_ENABLED
+		bool gizmos_requested : 1;
+		bool gizmos_disabled : 1;
+		bool gizmos_dirty : 1;
+		bool transform_gizmo_visible : 1;
+		Vector<Ref<Node3DGizmo>> gizmos;
+#endif
+
 		RID visibility_parent;
 
 		Node3D *parent = nullptr;
@@ -159,18 +168,8 @@ private:
 		// This is a subset of the `Node::children`, purely
 		// an optimization for faster traversal.
 		LocalVector<Node3D *> node3d_children;
-		uint32_t index_in_parent = UINT32_MAX;
 
 		ClientPhysicsInterpolationData *client_physics_interpolation_data = nullptr;
-
-#ifdef TOOLS_ENABLED
-		Vector<Ref<Node3DGizmo>> gizmos;
-		bool gizmos_requested : 1;
-		bool gizmos_disabled : 1;
-		bool gizmos_dirty : 1;
-		bool transform_gizmo_visible : 1;
-#endif
-
 	} data;
 
 	NodePath visibility_parent_path;

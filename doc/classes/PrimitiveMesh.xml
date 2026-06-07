@@ -55,6 +55,12 @@
 		<member name="material" type="Material" setter="set_material" getter="get_material">
 			The current [Material] of the primitive mesh.
 		</member>
+		<member name="uv1_scale" type="Vector2" setter="set_uv1_scale" getter="get_uv1_scale" default="Vector2(1.0, 1.0)">
+			Adjusts the scale of the generated UV map.
+		</member>
+		<member name="uv1_offset" type="Vector2" setter="set_uv1_offset" getter="get_uv1_offset" default="Vector2(0.0, 0.0)">
+			Offsets the coordinates of the generated UV map.
+		</member>
 		<member name="uv2_padding" type="float" setter="set_uv2_padding" getter="get_uv2_padding" default="2.0">
 			If [member add_uv2] is set, specifies the padding in pixels applied along seams of the mesh. Lower padding values allow making better use of the lightmap texture (resulting in higher texel density), but may introduce visible lightmap bleeding along edges.
 			If the size of the lightmap texture can't be determined when generating the mesh, UV2 is calculated assuming a texture size of 1024x1024.

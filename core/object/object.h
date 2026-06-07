@@ -638,6 +638,7 @@ private:
 		HashMap<Callable, Slot> slot_map;
 		bool removable = false;
 	};
+
 	friend struct _ObjectSignalLock;
 	mutable Mutex *signal_mutex = nullptr;
 	HashMap<StringName, SignalData> signal_map;
@@ -661,14 +662,16 @@ public:
 	bool _is_queued_for_deletion : 1; // Set to true by SceneTree::queue_delete().
 
 private:
+
 #ifdef TOOLS_ENABLED
 	bool _edited : 1;
 	uint32_t _edited_version = 0;
 	HashSet<String> editor_section_folding;
 #endif
+
 	ScriptInstance *script_instance = nullptr;
 	HashMap<StringName, Variant> metadata;
-	HashMap<StringName, Variant *> metadata_properties;
+	// HashMap<StringName, Variant *> metadata_properties;
 	mutable const GDType *_gdtype_ptr = nullptr;
 	void _reset_gdtype() const;
 
@@ -696,6 +699,7 @@ private:
 		GDExtensionInstanceBindingFreeCallback free_callback = nullptr;
 		GDExtensionInstanceBindingReferenceCallback reference_callback = nullptr;
 	};
+	
 	InstanceBinding *_instance_bindings = nullptr;
 	uint32_t _instance_binding_count = 0;
 

@@ -201,22 +201,24 @@ private:
 		Node *parent = nullptr;
 		Node *owner = nullptr;
 		HashMap<StringName, Node *> children;
-		mutable bool children_cache_dirty = false;
+
 		mutable LocalVector<Node *> children_cache;
 		HashMap<StringName, Node *> owned_unique_nodes;
-		bool unique_name_in_owner = false;
+
 		InternalMode internal_mode = INTERNAL_MODE_DISABLED;
 		mutable int internal_children_front_count_cache = 0;
 		mutable int internal_children_back_count_cache = 0;
 		mutable int external_children_count_cache = 0;
+
 		mutable int index = -1; // relative to front, normal or back.
 		int32_t depth = -1;
 		int blocked = 0; // Safeguard that throws an error when attempting to modify the tree in a harmful way while being traversed.
+		int multiplayer_authority = 1; // Server by default.
+
 		StringName name;
-		SceneTree *tree = nullptr;
-
 		String editor_description;
-
+		
+		SceneTree *tree = nullptr;
 		Viewport *viewport = nullptr;
 
 		mutable RID accessibility_element;
@@ -228,16 +230,21 @@ private:
 		Node *process_owner = nullptr;
 		ProcessThreadGroup process_thread_group = PROCESS_THREAD_GROUP_INHERIT;
 		Node *process_thread_group_owner = nullptr;
-		int process_thread_group_order = 0;
 		BitField<ProcessThreadMessages> process_thread_messages = {};
 		void *process_group = nullptr; // to avoid cyclic dependency
-
-		int multiplayer_authority = 1; // Server by default.
 		Variant rpc_config;
+
+		int process_thread_group_order = 0;
 
 		// Variables used to properly sort the node when processing, ignored otherwise.
 		int process_priority = 0;
 		int physics_process_priority = 0;
+
+		int32_t unique_scene_id = UNIQUE_SCENE_ID_UNASSIGNED;
+		mutable NodePath *path_cache = nullptr;
+
+		mutable bool children_cache_dirty = false;
+		bool unique_name_in_owner = false;
 
 		// Keep bitpacked values together to get better packing.
 		ProcessMode process_mode : 3;
@@ -288,11 +295,6 @@ private:
 
 		mutable bool is_translation_domain_inherited : 1;
 		mutable bool is_translation_domain_dirty : 1;
-
-		int32_t unique_scene_id = UNIQUE_SCENE_ID_UNASSIGNED;
-
-		mutable NodePath *path_cache = nullptr;
-
 	} data;
 
 	String _get_tree_string_pretty(const String &p_prefix, bool p_last);

@@ -54,12 +54,15 @@ private:
 
 	Ref<Material> material;
 	bool flip_faces = false;
-
 	bool add_uv2 = false;
-	float uv2_padding = 2.0;
 
 	// make sure we do an update after we've finished constructing our object
 	mutable bool pending_request = true;
+
+	float uv2_padding = 2.0;
+	Vector2 uv1_scale = Vector2(1.0, 1.0);
+	Vector2 uv1_offset = Vector2(0.0, 0.0);
+
 	void _update() const;
 
 protected:
@@ -113,6 +116,12 @@ public:
 
 	void set_uv2_padding(float p_padding);
 	float get_uv2_padding() const { return uv2_padding; }
+
+	void set_uv1_scale(Vector2 p_scale);
+	Vector2 get_uv1_scale() const { return uv1_scale; }
+
+	void set_uv1_offset(Vector2 p_offset);
+	Vector2 get_uv1_offset() const { return uv1_offset; }
 
 	void request_update();
 

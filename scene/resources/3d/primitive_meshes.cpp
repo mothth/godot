@@ -97,6 +97,16 @@ void PrimitiveMesh::_update() const {
 		}
 	}
 
+	// Adjust UVs
+	if (uv1_scale != Vector2(1.0, 1.0) || uv1_offset != Vector2(0.0, 0.0)) {
+		Vector<Vector2> uv = arr[RS::ARRAY_TEX_UV];
+		Vector2 *uvw = uv.ptrw();
+		for (int i = 0; i < uv.size(); i++) {
+			uvw[i] = uv[i] * uv1_scale + uv1_offset;
+		}
+		arr[RS::ARRAY_TEX_UV] = uv;
+	}
+
 	if (add_uv2) {
 		// _create_mesh_array should populate our UV2, this is a fallback in case it doesn't.
 		// As we don't know anything about the geometry we only pad the right and bottom edge
@@ -251,6 +261,13 @@ void PrimitiveMesh::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_uv2_padding", "uv2_padding"), &PrimitiveMesh::set_uv2_padding);
 	ClassDB::bind_method(D_METHOD("get_uv2_padding"), &PrimitiveMesh::get_uv2_padding);
 
+	ClassDB::bind_method(D_METHOD("set_uv1_scale", "scale"), &PrimitiveMesh::set_uv1_scale);
+	ClassDB::bind_method(D_METHOD("get_uv1_scale"), &PrimitiveMesh::get_uv1_scale);
+
+	ClassDB::bind_method(D_METHOD("set_uv1_offset", "offset"), &PrimitiveMesh::set_uv1_offset);
+	ClassDB::bind_method(D_METHOD("get_uv1_offset"), &PrimitiveMesh::get_uv1_offset);
+
+
 	ClassDB::bind_method(D_METHOD("request_update"), &PrimitiveMesh::request_update);
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial"), "set_material", "get_material");
@@ -258,6 +275,8 @@ void PrimitiveMesh::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "flip_faces"), "set_flip_faces", "get_flip_faces");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "add_uv2"), "set_add_uv2", "get_add_uv2");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "uv2_padding", PROPERTY_HINT_RANGE, "0,10,0.01,or_greater"), "set_uv2_padding", "get_uv2_padding");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "uv1_scale"), "set_uv1_scale", "get_uv1_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "uv1_offset"), "set_uv1_offset", "get_uv1_offset");
 
 	GDVIRTUAL_BIND(_create_mesh_array);
 }
@@ -323,6 +342,22 @@ void PrimitiveMesh::set_uv2_padding(float p_padding) {
 	}
 	uv2_padding = p_padding;
 	_update_lightmap_size();
+	request_update();
+}
+
+void PrimitiveMesh::set_uv1_scale(Vector2 p_scale) {
+	if (uv1_scale == p_scale) {
+		return;
+	}
+	uv1_scale = p_scale;
+	request_update();
+}
+
+void PrimitiveMesh::set_uv1_offset(Vector2 p_offset) {
+	if (uv1_offset == p_offset) {
+		return;
+	}
+	uv1_offset = p_offset;
 	request_update();
 }
 
