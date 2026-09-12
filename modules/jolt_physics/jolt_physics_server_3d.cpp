@@ -39,6 +39,7 @@
 #include "objects/jolt_area_3d.h"
 #include "objects/jolt_body_3d.h"
 #include "objects/jolt_soft_body_3d.h"
+#include "objects/jolt_portal_3d.h"
 #include "servers/physics_3d/physics_server_3d_wrap_mt.h"
 #include "shapes/jolt_box_shape_3d.h"
 #include "shapes/jolt_capsule_shape_3d.h"
@@ -1594,6 +1595,8 @@ void JoltPhysicsServer3D::free_rid(RID p_rid) {
 		free_soft_body(soft_body);
 	} else if (JoltSpace3D *space = space_owner.get_or_null(p_rid)) {
 		free_space(space);
+	} else if (JoltPortal3D *portal = portal_owner.get_or_null(p_rid)) {
+		free_portal(portal);
 	} else {
 		ERR_FAIL_MSG("Failed to free RID: The specified RID has no owner.");
 	}
@@ -1708,6 +1711,15 @@ void JoltPhysicsServer3D::free_joint(JoltJoint3D *p_joint) {
 
 	joint_owner.free(p_joint->get_rid());
 	memdelete(p_joint);
+}
+
+void JoltPhysicsServer3D::free_portal(JoltPortal3D *p_portal) {
+	ERR_FAIL_NULL(p_portal);
+
+	p_portal->set_space(nullptr);
+	p_portal->set_partner(nullptr);
+	portal_owner.free(p_portal->get_rid());
+	memdelete(p_portal);
 }
 
 #ifdef DEBUG_ENABLED
@@ -2017,4 +2029,196 @@ float JoltPhysicsServer3D::generic_6dof_joint_get_applied_torque(RID p_joint) {
 	JoltGeneric6DOFJoint3D *g6dof_joint = static_cast<JoltGeneric6DOFJoint3D *>(joint);
 
 	return g6dof_joint->get_applied_torque();
+}
+
+/* Portals */
+
+RID JoltPhysicsServer3D::portal_create() {
+	JoltPortal3D *portal = memnew(JoltPortal3D);
+	RID rid = portal_owner.make_rid(portal);
+	portal->set_rid(rid);
+	return rid;
+}
+
+void JoltPhysicsServer3D::portal_set_space(RID p_portal, RID p_space) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	JoltSpace3D *space = nullptr;
+
+	if (p_space.is_valid()) {
+		space = space_owner.get_or_null(p_space);
+		ERR_FAIL_NULL(space);
+	}
+
+	portal->set_space(space);
+}
+
+RID JoltPhysicsServer3D::portal_get_space(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, RID());
+
+	const JoltSpace3D *space = portal->get_space();
+
+	if (space == nullptr) {
+		return RID();
+	}
+
+	return space->get_rid();
+}
+
+void JoltPhysicsServer3D::portal_set_partner(RID p_portal, RID p_partner) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	JoltPortal3D *partner = nullptr;
+
+	if (p_partner.is_valid()) {
+		partner = portal_owner.get_or_null(p_partner);
+		ERR_FAIL_NULL(partner);
+	}
+
+	portal->set_partner(partner);
+}
+
+RID JoltPhysicsServer3D::portal_get_partner(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, RID());
+
+	const JoltPortal3D *partner = portal->get_partner();
+
+	if (partner == nullptr) {
+		return RID();
+	}
+
+	return partner->get_rid();
+}
+
+void JoltPhysicsServer3D::portal_set_ghost_mode(RID p_portal, PortalGhostMode p_mode) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_ghost_mode(p_mode);
+}
+
+JoltPhysicsServer3D::PortalGhostMode JoltPhysicsServer3D::portal_get_ghost_mode(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, PORTAL_GHOST_NONE);
+
+	return portal->get_ghost_mode();
+}
+
+void JoltPhysicsServer3D::portal_set_collision_layer(RID p_portal, uint32_t p_layer) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_collision_layer(p_layer);
+}
+
+uint32_t JoltPhysicsServer3D::portal_get_collision_layer(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, 0);
+
+	return portal->get_collision_layer();
+}
+
+void JoltPhysicsServer3D::portal_set_teleport_mask(RID p_portal, uint32_t p_mask) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_teleport_mask(p_mask);
+}
+
+uint32_t JoltPhysicsServer3D::portal_get_teleport_mask(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, 0);
+
+	return portal->get_teleport_mask();
+}
+
+void JoltPhysicsServer3D::portal_attach_object_instance_id(RID p_portal, ObjectID p_id) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_instance_id(p_id);
+}
+
+ObjectID JoltPhysicsServer3D::portal_get_object_instance_id(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, ObjectID());
+
+	return portal->get_instance_id();
+}
+
+void JoltPhysicsServer3D::portal_set_transform(RID p_portal, const Transform3D &p_transform) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_transform(p_transform);
+}
+
+Transform3D JoltPhysicsServer3D::portal_get_transform(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, Transform3D());
+
+	return portal->get_transform();
+}
+
+void JoltPhysicsServer3D::portal_set_shape_type(RID p_portal, PortalShapeType p_type) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_shape_type(p_type);
+}
+
+JoltPhysicsServer3D::PortalShapeType JoltPhysicsServer3D::portal_get_shape_type(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, PORTAL_SHAPE_RECTANGLE);
+
+	return portal->get_shape_type();
+}
+
+void JoltPhysicsServer3D::portal_set_shape_data(RID p_portal, const Variant &p_data) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_shape_data(p_data);
+}
+
+Variant JoltPhysicsServer3D::portal_get_shape_data(RID p_portal) const {
+	const JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL_V(portal, Variant());
+
+	return portal->get_shape_data();
+}
+
+void JoltPhysicsServer3D::portal_set_disabled(RID p_portal, bool p_disabled) {
+
+}
+
+bool JoltPhysicsServer3D::portal_is_disabled(RID p_portal) const {
+	// TODO
+	return false;
+}
+
+void JoltPhysicsServer3D::portal_set_monitor_callback(RID p_portal, const Callable &p_callable) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_monitor_callback(p_callable);
+}
+
+void JoltPhysicsServer3D::portal_set_teleport_callback(RID p_portal, const Callable &p_callable) {
+	JoltPortal3D *portal = portal_owner.get_or_null(p_portal);
+	ERR_FAIL_NULL(portal);
+
+	portal->set_teleport_callback(p_callable);
+}
+
+void JoltPhysicsServer3D::portal_set_param(RID p_portal, PortalParameter p_param, const Variant &p_value) {
+
+}
+
+Variant JoltPhysicsServer3D::portal_get_param(RID p_portal, PortalParameter p_param) const {
+
 }

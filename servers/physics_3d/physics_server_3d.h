@@ -449,6 +449,7 @@ public:
 		BODY_PARAM_ANGULAR_DAMP_MODE,
 		BODY_PARAM_LINEAR_DAMP,
 		BODY_PARAM_ANGULAR_DAMP,
+		BODY_PARAM_TELEPORT_POINT, ///< for portals, the point relative to the body that must pass through the portal before teleporting
 		BODY_PARAM_MAX,
 	};
 
@@ -794,6 +795,65 @@ public:
 	virtual void generic_6dof_joint_set_flag(RID p_joint, Vector3::Axis, G6DOFJointAxisFlag p_flag, bool p_enable) = 0;
 	virtual bool generic_6dof_joint_get_flag(RID p_joint, Vector3::Axis, G6DOFJointAxisFlag p_flag) const = 0;
 
+	/* PORTAL API */
+
+	enum PortalGhostMode {
+		PORTAL_GHOST_NONE,
+		PORTAL_GHOST,
+		PORTAL_GHOST_SLICE
+	};
+
+	enum PortalShapeType {
+		PORTAL_SHAPE_RECTANGLE, ///< vec3:"extents"
+		PORTAL_SHAPE_CIRCLE, ///< float:"radius"
+		PORTAL_SHAPE_CAPSULE,
+		PORTAL_SHAPE_CONVEX_POLYGON, ///< array of planes:"planes"
+		PORTAL_SHAPE_CONCAVE_POLYGON ///< Vector2 array:"triangles" , or Dictionary with "indices" (int array) and "triangles" (Vector2 array)
+	};
+
+	virtual RID portal_create() = 0;
+
+	virtual void portal_set_space(RID p_portal, RID p_space) = 0;
+	virtual RID portal_get_space(RID p_portal) const = 0;
+	
+	virtual void portal_set_partner(RID p_portal, RID p_partner) = 0;
+	virtual RID portal_get_partner(RID p_portal) const = 0;
+
+	virtual void portal_set_ghost_mode(RID p_portal, PortalGhostMode p_mode) = 0;
+	virtual PortalGhostMode portal_get_ghost_mode(RID p_portal) const = 0;
+
+	virtual void portal_set_collision_layer(RID p_portal, uint32_t p_layer) = 0;
+	virtual uint32_t portal_get_collision_layer(RID p_portal) const = 0;
+
+	virtual void portal_set_teleport_mask(RID p_portal, uint32_t p_mask) = 0;
+	virtual uint32_t portal_get_teleport_mask(RID p_portal) const = 0;
+
+	virtual void portal_attach_object_instance_id(RID p_portal, ObjectID p_id) = 0;
+	virtual ObjectID portal_get_object_instance_id(RID p_portal) const = 0;
+
+	virtual void portal_set_transform(RID p_portal, const Transform3D &p_transform) = 0;
+	virtual Transform3D portal_get_transform(RID p_portal) const = 0;
+
+	virtual void portal_set_shape_type(RID p_portal, PortalShapeType p_type) = 0;
+	virtual PortalShapeType portal_get_shape_type(RID p_portal) const = 0;
+
+	virtual void portal_set_shape_data(RID p_portal, const Variant &p_data) = 0;
+	virtual Variant portal_get_shape_data(RID p_portal) const = 0;
+
+	virtual void portal_set_disabled(RID p_portal, bool p_disabled) = 0;
+	virtual bool portal_is_disabled(RID p_portal) const = 0;
+
+	virtual void portal_set_monitor_callback(RID p_portal, const Callable &p_callback) = 0;
+	virtual void portal_set_teleport_callback(RID p_portal, const Callable &p_callback) = 0;
+
+	enum PortalParameter {
+		PORTAL_PARAM_DOUBLE_SIDED, ///< bool (default: false)
+		PORTAL_PARAM_MAX_RAY_DEPTH ///< int (default: -1)
+	};
+
+	virtual void portal_set_param(RID p_portal, PortalParameter p_param, const Variant &p_value) = 0;
+	virtual Variant portal_get_param(RID p_portal, PortalParameter p_param) const = 0;
+
 	/* QUERY API */
 
 	enum AreaBodyStatus {
@@ -1070,5 +1130,8 @@ VARIANT_ENUM_CAST(PhysicsServer3D::SliderJointParam);
 VARIANT_ENUM_CAST(PhysicsServer3D::ConeTwistJointParam);
 VARIANT_ENUM_CAST(PhysicsServer3D::G6DOFJointAxisParam);
 VARIANT_ENUM_CAST(PhysicsServer3D::G6DOFJointAxisFlag);
+VARIANT_ENUM_CAST(PhysicsServer3D::PortalGhostMode);
+VARIANT_ENUM_CAST(PhysicsServer3D::PortalShapeType);
+VARIANT_ENUM_CAST(PhysicsServer3D::PortalParameter);
 VARIANT_ENUM_CAST(PhysicsServer3D::AreaBodyStatus);
 VARIANT_ENUM_CAST(PhysicsServer3D::ProcessInfo);

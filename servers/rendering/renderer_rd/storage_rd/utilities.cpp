@@ -35,6 +35,7 @@
 #include "mesh_storage.h"
 #include "particles_storage.h"
 #include "texture_storage.h"
+#include "portal_storage.h"
 
 using namespace RendererRD;
 
@@ -80,6 +81,9 @@ RS::InstanceType Utilities::get_base_type(RID p_rid) const {
 	}
 	if (RendererRD::Fog::get_singleton()->owns_fog_volume(p_rid)) {
 		return RS::INSTANCE_FOG_VOLUME;
+	}
+	if (RendererRD::PortalStorage::get_singleton()->owns_portal(p_rid)) {
+		return RS::INSTANCE_PORTAL;
 	}
 	if (owns_visibility_notifier(p_rid)) {
 		return RS::INSTANCE_VISIBLITY_NOTIFIER;

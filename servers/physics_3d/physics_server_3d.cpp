@@ -1097,6 +1097,7 @@ void PhysicsServer3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(BODY_PARAM_ANGULAR_DAMP_MODE);
 	BIND_ENUM_CONSTANT(BODY_PARAM_LINEAR_DAMP);
 	BIND_ENUM_CONSTANT(BODY_PARAM_ANGULAR_DAMP);
+	BIND_ENUM_CONSTANT(BODY_PARAM_TELEPORT_POINT);
 	BIND_ENUM_CONSTANT(BODY_PARAM_MAX);
 
 	BIND_ENUM_CONSTANT(BODY_DAMP_MODE_COMBINE);
@@ -1130,6 +1131,59 @@ void PhysicsServer3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_X);
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Y);
 	BIND_ENUM_CONSTANT(BODY_AXIS_ANGULAR_Z);
+
+	/* Portal API */
+
+	ClassDB::bind_method(D_METHOD("portal_create"), &PhysicsServer3D::portal_create);
+
+	ClassDB::bind_method(D_METHOD("portal_set_space", "portal", "space"), &PhysicsServer3D::portal_set_space);
+	ClassDB::bind_method(D_METHOD("portal_get_space", "portal"), &PhysicsServer3D::portal_get_space);
+
+	ClassDB::bind_method(D_METHOD("portal_set_partner", "portal", "partner"), &PhysicsServer3D::portal_set_partner);
+	ClassDB::bind_method(D_METHOD("portal_get_partner", "portal"), &PhysicsServer3D::portal_get_partner);
+
+	ClassDB::bind_method(D_METHOD("portal_set_ghost_mode", "portal", "mode"), &PhysicsServer3D::portal_set_ghost_mode);
+	ClassDB::bind_method(D_METHOD("portal_get_ghost_mode", "portal"), &PhysicsServer3D::portal_get_ghost_mode);
+
+	ClassDB::bind_method(D_METHOD("portal_set_collision_layer", "portal", "layer"), &PhysicsServer3D::portal_set_collision_layer);
+	ClassDB::bind_method(D_METHOD("portal_get_collision_layer", "portal"), &PhysicsServer3D::portal_get_collision_layer);
+
+	ClassDB::bind_method(D_METHOD("portal_set_teleport_mask", "portal", "mask"), &PhysicsServer3D::portal_set_teleport_mask);
+	ClassDB::bind_method(D_METHOD("portal_get_teleport_mask", "portal"), &PhysicsServer3D::portal_get_teleport_mask);
+
+	ClassDB::bind_method(D_METHOD("portal_attach_object_instance_id", "portal", "id"), &PhysicsServer3D::portal_attach_object_instance_id);
+	ClassDB::bind_method(D_METHOD("portal_get_object_instance_id", "portal"), &PhysicsServer3D::portal_get_object_instance_id);
+
+	ClassDB::bind_method(D_METHOD("portal_set_transform", "portal", "transform"), &PhysicsServer3D::portal_set_transform);
+	ClassDB::bind_method(D_METHOD("portal_get_transform", "portal"), &PhysicsServer3D::portal_get_transform);
+
+	ClassDB::bind_method(D_METHOD("portal_set_shape_type", "portal", "type"), &PhysicsServer3D::portal_set_shape_type);
+	ClassDB::bind_method(D_METHOD("portal_get_shape_type", "portal"), &PhysicsServer3D::portal_get_shape_type);
+
+	ClassDB::bind_method(D_METHOD("portal_set_shape_data", "portal", "data"), &PhysicsServer3D::portal_set_shape_data);
+	ClassDB::bind_method(D_METHOD("portal_get_shape_data", "portal"), &PhysicsServer3D::portal_get_shape_data);
+
+	ClassDB::bind_method(D_METHOD("portal_set_disabled", "portal", "disabled"), &PhysicsServer3D::portal_set_disabled);
+	ClassDB::bind_method(D_METHOD("portal_is_disabled", "portal"), &PhysicsServer3D::portal_is_disabled);
+
+	ClassDB::bind_method(D_METHOD("portal_set_monitor_callback", "portal", "callback"), &PhysicsServer3D::portal_set_monitor_callback);
+	ClassDB::bind_method(D_METHOD("portal_set_teleport_callback", "portal", "callback"), &PhysicsServer3D::portal_set_teleport_callback);
+
+	ClassDB::bind_method(D_METHOD("portal_set_param", "portal", "param", "value"), &PhysicsServer3D::portal_set_param);
+	ClassDB::bind_method(D_METHOD("portal_get_param", "portal", "param"), &PhysicsServer3D::portal_get_param);
+
+	BIND_ENUM_CONSTANT(PORTAL_GHOST_NONE);
+	BIND_ENUM_CONSTANT(PORTAL_GHOST);
+	BIND_ENUM_CONSTANT(PORTAL_GHOST_SLICE);
+
+	BIND_ENUM_CONSTANT(PORTAL_SHAPE_RECTANGLE);
+	BIND_ENUM_CONSTANT(PORTAL_SHAPE_CIRCLE);
+	BIND_ENUM_CONSTANT(PORTAL_SHAPE_CAPSULE);
+	BIND_ENUM_CONSTANT(PORTAL_SHAPE_CONVEX_POLYGON);
+	BIND_ENUM_CONSTANT(PORTAL_SHAPE_CONCAVE_POLYGON);
+
+	BIND_ENUM_CONSTANT(PORTAL_PARAM_DOUBLE_SIDED);
+	BIND_ENUM_CONSTANT(PORTAL_PARAM_MAX_RAY_DEPTH);
 
 #endif
 }

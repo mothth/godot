@@ -50,6 +50,7 @@ class JoltShapedObject3D;
 class JoltShape3D;
 class JoltSoftBody3D;
 class JoltSpace3D;
+class JoltPortal3D;
 
 class JoltObject3D {
 public:
@@ -58,6 +59,7 @@ public:
 		OBJECT_TYPE_BODY,
 		OBJECT_TYPE_SOFT_BODY,
 		OBJECT_TYPE_AREA,
+		OBJECT_TYPE_PORTAL
 	};
 
 protected:
@@ -100,6 +102,7 @@ public:
 	bool is_body() const { return object_type == OBJECT_TYPE_BODY; }
 	bool is_soft_body() const { return object_type == OBJECT_TYPE_SOFT_BODY; }
 	bool is_area() const { return object_type == OBJECT_TYPE_AREA; }
+	bool is_portal() const { return object_type == OBJECT_TYPE_PORTAL; }
 	bool is_shaped() const { return object_type != OBJECT_TYPE_SOFT_BODY; }
 
 	JoltShapedObject3D *as_shaped() { return is_shaped() ? reinterpret_cast<JoltShapedObject3D *>(this) : nullptr; }
@@ -113,6 +116,9 @@ public:
 
 	JoltArea3D *as_area() { return is_area() ? reinterpret_cast<JoltArea3D *>(this) : nullptr; }
 	const JoltArea3D *as_area() const { return is_area() ? reinterpret_cast<const JoltArea3D *>(this) : nullptr; }
+
+	JoltPortal3D *as_portal() { return is_portal() ? reinterpret_cast<JoltPortal3D *>(this) : nullptr; }
+	const JoltPortal3D *as_portal() const { return is_portal() ? reinterpret_cast<const JoltPortal3D *>(this) : nullptr; }
 
 	RID get_rid() const { return rid; }
 	void set_rid(const RID &p_rid) { rid = p_rid; }
@@ -145,8 +151,9 @@ public:
 	virtual bool can_interact_with(const JoltBody3D &p_other) const = 0;
 	virtual bool can_interact_with(const JoltSoftBody3D &p_other) const = 0;
 	virtual bool can_interact_with(const JoltArea3D &p_other) const = 0;
+	virtual bool can_interact_with(const JoltPortal3D &p_other) const { return false; }
 
-	virtual bool reports_contacts() const = 0;
+	virtual bool reports_contacts() const { return false; }
 
 	virtual void pre_step(float p_step, JPH::Body &p_jolt_body) {}
 

@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/math/vector3.h"
+#include "core/math/vector4.h"
 
 class Variant;
 
@@ -84,6 +85,10 @@ struct [[nodiscard]] Plane {
 	constexpr bool operator!=(const Plane &p_plane) const;
 	explicit operator String() const;
 
+	constexpr operator Vector4() const {
+		return Vector4(normal.x, normal.y, normal.z, d);
+	}
+
 	Plane() = default;
 	constexpr Plane(real_t p_a, real_t p_b, real_t p_c, real_t p_d) :
 			normal(p_a, p_b, p_c),
@@ -92,6 +97,7 @@ struct [[nodiscard]] Plane {
 	constexpr Plane(const Vector3 &p_normal, real_t p_d = 0.0);
 	_FORCE_INLINE_ Plane(const Vector3 &p_normal, const Vector3 &p_point);
 	_FORCE_INLINE_ Plane(const Vector3 &p_point1, const Vector3 &p_point2, const Vector3 &p_point3, ClockDirection p_dir = CLOCKWISE);
+	_FORCE_INLINE_ Plane(const Vector3 &p_point1, const Vector3 &p_point2, const Vector3 &p_point3, const Vector3 &p_global_point, ClockDirection p_dir = CLOCKWISE);
 };
 
 inline constexpr Plane Plane::PLANE_YZ = { 1, 0, 0, 0 };
@@ -131,6 +137,17 @@ Plane::Plane(const Vector3 &p_point1, const Vector3 &p_point2, const Vector3 &p_
 
 	normal.normalize();
 	d = normal.dot(p_point1);
+}
+
+Plane::Plane(const Vector3 &p_point1, const Vector3 &p_point2, const Vector3 &p_point3, const Vector3 &p_global_point, ClockDirection p_dir) {
+	if (p_dir == CLOCKWISE) {
+		normal = (p_point1 - p_point3).cross(p_point1 - p_point2);
+	} else {
+		normal = (p_point1 - p_point2).cross(p_point1 - p_point3);
+	}
+
+	normal.normalize();
+	d = normal.dot(p_global_point);
 }
 
 constexpr bool Plane::operator==(const Plane &p_plane) const {

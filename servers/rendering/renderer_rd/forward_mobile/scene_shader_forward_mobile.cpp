@@ -28,6 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#ifndef MOBILE_RENDERER_DISABLED
+
 #include "scene_shader_forward_mobile.h"
 #include "core/config/project_settings.h"
 #include "core/math/math_defs.h"
@@ -986,3 +988,5 @@ SceneShaderForwardMobile::~SceneShaderForwardMobile() {
 	material_storage->material_free(default_material);
 	material_storage->material_free(debug_shadow_splits_material);
 }
+
+#endif

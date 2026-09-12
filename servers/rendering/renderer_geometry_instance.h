@@ -35,6 +35,9 @@
 #include "core/templates/rid.h"
 #include "storage/utilities.h"
 
+// Forward declaration from storage/portal_storage.h
+struct PortalMaskData;
+
 // API definition for our RenderGeometryInstance class so we can expose this through GDExtension in the near future
 class RenderGeometryInstance {
 public:
@@ -70,6 +73,7 @@ public:
 	virtual void pair_reflection_probe_instances(const RID *p_reflection_probe_instances, uint32_t p_reflection_probe_instance_count) = 0;
 	virtual void pair_decal_instances(const RID *p_decal_instances, uint32_t p_decal_instance_count) = 0;
 	virtual void pair_voxel_gi_instances(const RID *p_voxel_gi_instances, uint32_t p_voxel_gi_instance_count) = 0;
+	virtual void assign_portal_mask(const PortalMaskData *p_portal_mask) = 0;
 
 	virtual void set_softshadow_projector_pairing(bool p_softshadow, bool p_projector) = 0;
 };
@@ -82,25 +86,28 @@ public:
 	uint32_t flags_cache = 0;
 
 	// used during rendering
-	float depth = 0;
+	const PortalMaskData *portal_mask = nullptr; // Assigned from culling
+	
+	uint32_t layer_mask = 1;
 
 	RID mesh_instance;
 
 	Transform3D transform;
-	bool mirror = false;
 	AABB transformed_aabb;
+	bool mirror = false;
 	bool non_uniform_scale = false;
+
+	bool use_aabb_center = true;
+	float sorting_offset = 0.0;
+
 	float lod_model_scale = 1.0;
 	float lod_bias = 0.0;
-	float sorting_offset = 0.0;
-	bool use_aabb_center = true;
-
-	uint32_t layer_mask = 1;
 
 	bool fade_near = false;
+	bool fade_far = false;
+
 	float fade_near_begin = 0;
 	float fade_near_end = 0;
-	bool fade_far = false;
 	float fade_far_begin = 0;
 	float fade_far_end = 0;
 
@@ -151,4 +158,8 @@ public:
 
 	virtual Transform3D get_transform() override;
 	virtual AABB get_aabb() override;
+
+	virtual void assign_portal_mask(const PortalMaskData *p_portal_mask) override {
+		portal_mask = p_portal_mask;
+	}
 };

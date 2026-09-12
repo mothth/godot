@@ -43,7 +43,8 @@ constexpr JPH::BroadPhaseLayer BODY_STATIC_BIG(1);
 constexpr JPH::BroadPhaseLayer BODY_DYNAMIC(2);
 constexpr JPH::BroadPhaseLayer AREA_DETECTABLE(3);
 constexpr JPH::BroadPhaseLayer AREA_UNDETECTABLE(4);
+constexpr JPH::BroadPhaseLayer PORTAL(5);
 
-constexpr uint32_t COUNT = 5;
+constexpr uint32_t COUNT = 6;
 
 } // namespace JoltBroadPhaseLayer

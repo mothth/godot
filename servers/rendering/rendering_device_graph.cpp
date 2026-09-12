@@ -772,8 +772,17 @@ void RenderingDeviceGraph::_run_compute_list_command(RDD::CommandBufferID p_comm
 			} break;
 			case ComputeListInstruction::TYPE_BIND_UNIFORM_SETS: {
 				const ComputeListBindUniformSetsInstruction *bind_uniform_sets_instruction = reinterpret_cast<const ComputeListBindUniformSetsInstruction *>(instruction);
-				driver->command_bind_compute_uniform_sets(p_command_buffer, VectorView<RDD::UniformSetID>(bind_uniform_sets_instruction->uniform_set_ids(), bind_uniform_sets_instruction->set_count), bind_uniform_sets_instruction->shader, bind_uniform_sets_instruction->first_set_index, bind_uniform_sets_instruction->set_count, bind_uniform_sets_instruction->dynamic_offsets_mask);
-				instruction_data_cursor += sizeof(ComputeListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				driver->command_bind_compute_uniform_sets(
+					p_command_buffer,
+					VectorView<RDD::UniformSetID>(bind_uniform_sets_instruction->uniform_set_ids(), bind_uniform_sets_instruction->set_count),
+					bind_uniform_sets_instruction->shader,
+					bind_uniform_sets_instruction->first_set_index,
+					bind_uniform_sets_instruction->set_count,
+					VectorView<uint32_t>(bind_uniform_sets_instruction->dynamic_offsets(), bind_uniform_sets_instruction->dynamic_offset_count)
+				);
+				instruction_data_cursor += sizeof(ComputeListBindUniformSetsInstruction);
+				instruction_data_cursor += sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				instruction_data_cursor += sizeof(uint32_t) * bind_uniform_sets_instruction->dynamic_offset_count;
 			} break;
 			case ComputeListInstruction::TYPE_DISPATCH: {
 				const ComputeListDispatchInstruction *dispatch_instruction = reinterpret_cast<const ComputeListDispatchInstruction *>(instruction);
@@ -858,23 +867,43 @@ void RenderingDeviceGraph::_run_draw_list_command(RDD::CommandBufferID p_command
 				driver->command_render_bind_index_buffer(p_command_buffer, bind_index_buffer_instruction->buffer, bind_index_buffer_instruction->format, bind_index_buffer_instruction->offset);
 				instruction_data_cursor += sizeof(DrawListBindIndexBufferInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_BIND_PIPELINE: {
 				const DrawListBindPipelineInstruction *bind_pipeline_instruction = reinterpret_cast<const DrawListBindPipelineInstruction *>(instruction);
 				driver->command_bind_render_pipeline(p_command_buffer, bind_pipeline_instruction->pipeline);
 				instruction_data_cursor += sizeof(DrawListBindPipelineInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_BIND_UNIFORM_SETS: {
 				const DrawListBindUniformSetsInstruction *bind_uniform_sets_instruction = reinterpret_cast<const DrawListBindUniformSetsInstruction *>(instruction);
-				driver->command_bind_render_uniform_sets(p_command_buffer, VectorView<RDD::UniformSetID>(bind_uniform_sets_instruction->uniform_set_ids(), bind_uniform_sets_instruction->set_count), bind_uniform_sets_instruction->shader, bind_uniform_sets_instruction->first_set_index, bind_uniform_sets_instruction->set_count, bind_uniform_sets_instruction->dynamic_offsets_mask);
-				instruction_data_cursor += sizeof(DrawListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				driver->command_bind_render_uniform_sets(
+					p_command_buffer,
+					VectorView<RDD::UniformSetID>(bind_uniform_sets_instruction->uniform_set_ids(), bind_uniform_sets_instruction->set_count),
+					bind_uniform_sets_instruction->shader,
+					bind_uniform_sets_instruction->first_set_index,
+					bind_uniform_sets_instruction->set_count,
+					VectorView<uint32_t>(bind_uniform_sets_instruction->dynamic_offsets(), bind_uniform_sets_instruction->dynamic_offset_count)
+				);
+				instruction_data_cursor += sizeof(DrawListBindUniformSetsInstruction);
+				instruction_data_cursor += sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				instruction_data_cursor += sizeof(uint32_t) * bind_uniform_sets_instruction->dynamic_offset_count;
 			} break;
+
 			case DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS: {
 				const DrawListBindVertexBuffersInstruction *bind_vertex_buffers_instruction = reinterpret_cast<const DrawListBindVertexBuffersInstruction *>(instruction);
-				driver->command_render_bind_vertex_buffers(p_command_buffer, bind_vertex_buffers_instruction->vertex_buffers_count, bind_vertex_buffers_instruction->vertex_buffers(), bind_vertex_buffers_instruction->vertex_buffer_offsets(), bind_vertex_buffers_instruction->dynamic_offsets_mask);
+				driver->command_render_bind_vertex_buffers(
+					p_command_buffer,
+					bind_vertex_buffers_instruction->vertex_buffers_count,
+					bind_vertex_buffers_instruction->vertex_buffers(),
+					bind_vertex_buffers_instruction->vertex_buffer_offsets(),
+					VectorView<uint32_t>(bind_vertex_buffers_instruction->dynamic_offsets(), bind_vertex_buffers_instruction->dynamic_offset_count)
+				);
 				instruction_data_cursor += sizeof(DrawListBindVertexBuffersInstruction);
 				instruction_data_cursor += sizeof(RDD::BufferID) * bind_vertex_buffers_instruction->vertex_buffers_count;
 				instruction_data_cursor += sizeof(uint64_t) * bind_vertex_buffers_instruction->vertex_buffers_count;
+				instruction_data_cursor += sizeof(uint32_t) * bind_vertex_buffers_instruction->dynamic_offset_count;
 			} break;
+
 			case DrawListInstruction::TYPE_CLEAR_ATTACHMENTS: {
 				const DrawListClearAttachmentsInstruction *clear_attachments_instruction = reinterpret_cast<const DrawListClearAttachmentsInstruction *>(instruction);
 				const VectorView attachments_clear_view(clear_attachments_instruction->attachments_clear(), clear_attachments_instruction->attachments_clear_count);
@@ -884,46 +913,55 @@ void RenderingDeviceGraph::_run_draw_list_command(RDD::CommandBufferID p_command
 				instruction_data_cursor += sizeof(RDD::AttachmentClear) * clear_attachments_instruction->attachments_clear_count;
 				instruction_data_cursor += sizeof(Rect2i) * clear_attachments_instruction->attachments_clear_rect_count;
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW: {
 				const DrawListDrawInstruction *draw_instruction = reinterpret_cast<const DrawListDrawInstruction *>(instruction);
 				driver->command_render_draw(p_command_buffer, draw_instruction->vertex_count, draw_instruction->instance_count, 0, 0);
 				instruction_data_cursor += sizeof(DrawListDrawInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW_INDEXED: {
 				const DrawListDrawIndexedInstruction *draw_indexed_instruction = reinterpret_cast<const DrawListDrawIndexedInstruction *>(instruction);
 				driver->command_render_draw_indexed(p_command_buffer, draw_indexed_instruction->index_count, draw_indexed_instruction->instance_count, draw_indexed_instruction->first_index, 0, 0);
 				instruction_data_cursor += sizeof(DrawListDrawIndexedInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW_INDIRECT: {
 				const DrawListDrawIndirectInstruction *draw_indirect_instruction = reinterpret_cast<const DrawListDrawIndirectInstruction *>(instruction);
 				driver->command_render_draw_indirect(p_command_buffer, draw_indirect_instruction->buffer, draw_indirect_instruction->offset, draw_indirect_instruction->draw_count, draw_indirect_instruction->stride);
 				instruction_data_cursor += sizeof(DrawListDrawIndirectInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT: {
 				const DrawListDrawIndexedIndirectInstruction *draw_indexed_indirect_instruction = reinterpret_cast<const DrawListDrawIndexedIndirectInstruction *>(instruction);
 				driver->command_render_draw_indexed_indirect(p_command_buffer, draw_indexed_indirect_instruction->buffer, draw_indexed_indirect_instruction->offset, draw_indexed_indirect_instruction->draw_count, draw_indexed_indirect_instruction->stride);
 				instruction_data_cursor += sizeof(DrawListDrawIndexedIndirectInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_EXECUTE_COMMANDS: {
 				const DrawListExecuteCommandsInstruction *execute_commands_instruction = reinterpret_cast<const DrawListExecuteCommandsInstruction *>(instruction);
 				driver->command_buffer_execute_secondary(p_command_buffer, execute_commands_instruction->command_buffer);
 				instruction_data_cursor += sizeof(DrawListExecuteCommandsInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_NEXT_SUBPASS: {
 				const DrawListNextSubpassInstruction *next_subpass_instruction = reinterpret_cast<const DrawListNextSubpassInstruction *>(instruction);
 				driver->command_next_render_subpass(p_command_buffer, next_subpass_instruction->command_buffer_type);
 				instruction_data_cursor += sizeof(DrawListNextSubpassInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_BLEND_CONSTANTS: {
 				const DrawListSetBlendConstantsInstruction *set_blend_constants_instruction = reinterpret_cast<const DrawListSetBlendConstantsInstruction *>(instruction);
 				driver->command_render_set_blend_constants(p_command_buffer, set_blend_constants_instruction->color);
 				instruction_data_cursor += sizeof(DrawListSetBlendConstantsInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_LINE_WIDTH: {
 				const DrawListSetLineWidthInstruction *set_line_width_instruction = reinterpret_cast<const DrawListSetLineWidthInstruction *>(instruction);
 				driver->command_render_set_line_width(p_command_buffer, set_line_width_instruction->width);
 				instruction_data_cursor += sizeof(DrawListSetLineWidthInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_PUSH_CONSTANT: {
 				const DrawListSetPushConstantInstruction *set_push_constant_instruction = reinterpret_cast<const DrawListSetPushConstantInstruction *>(instruction);
 				const VectorView push_constant_data_view(reinterpret_cast<const uint32_t *>(set_push_constant_instruction->data()), set_push_constant_instruction->size / sizeof(uint32_t));
@@ -931,21 +969,57 @@ void RenderingDeviceGraph::_run_draw_list_command(RDD::CommandBufferID p_command
 				instruction_data_cursor += sizeof(DrawListSetPushConstantInstruction);
 				instruction_data_cursor += set_push_constant_instruction->size;
 			} break;
+
 			case DrawListInstruction::TYPE_SET_SCISSOR: {
 				const DrawListSetScissorInstruction *set_scissor_instruction = reinterpret_cast<const DrawListSetScissorInstruction *>(instruction);
 				driver->command_render_set_scissor(p_command_buffer, set_scissor_instruction->rect);
 				instruction_data_cursor += sizeof(DrawListSetScissorInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_VIEWPORT: {
 				const DrawListSetViewportInstruction *set_viewport_instruction = reinterpret_cast<const DrawListSetViewportInstruction *>(instruction);
 				driver->command_render_set_viewport(p_command_buffer, set_viewport_instruction->rect);
 				instruction_data_cursor += sizeof(DrawListSetViewportInstruction);
 			} break;
+
+			case DrawListInstruction::TYPE_SET_STENCIL_MASKS: {
+				const DrawListSetStencilMasksInstruction *set_stencil_masks_instruction = reinterpret_cast<const DrawListSetStencilMasksInstruction *>(instruction);
+				driver->command_render_set_stencil_masks(
+					p_command_buffer,
+					set_stencil_masks_instruction->face_mask,
+					set_stencil_masks_instruction->reference,
+					set_stencil_masks_instruction->compare_mask,
+					set_stencil_masks_instruction->write_mask);
+				instruction_data_cursor += sizeof(DrawListSetStencilMasksInstruction);
+			} break;
+
+#ifdef EXTENDED_DYNAMIC_STATE
+
+			case DrawListInstruction::TYPE_SET_STENCIL_ENABLED: {
+				const DrawListSetStencilEnabledInstruction *set_stencil_enabled_instruction = reinterpret_cast<const DrawListSetStencilEnabledInstruction *>(instruction);
+				instruction_data_cursor += sizeof(DrawListSetStencilEnabledInstruction);
+			} break;
+
+			case DrawListInstruction::TYPE_SET_STENCIL_OPERATORS: {
+				const DrawListSetStencilOperatorsInstruction *set_stencil_operators_instruction = reinterpret_cast<const DrawListSetStencilOperatorsInstruction *>(instruction);
+				driver->command_render_set_stencil_operators(
+					p_command_buffer,
+					set_stencil_operators_instruction->face_mask,
+					set_stencil_operators_instruction->fail,
+					set_stencil_operators_instruction->pass,
+					set_stencil_operators_instruction->depth_fail,
+					set_stencil_operators_instruction->compare);
+				instruction_data_cursor += sizeof(DrawListSetStencilOperatorsInstruction);
+			} break;
+
+#endif // EXTENDED_DYNAMIC_STATE
+
 			case DrawListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE: {
 				const DrawListUniformSetPrepareForUseInstruction *uniform_set_prepare_for_use_instruction = reinterpret_cast<const DrawListUniformSetPrepareForUseInstruction *>(instruction);
 				driver->command_uniform_set_prepare_for_use(p_command_buffer, uniform_set_prepare_for_use_instruction->uniform_set, uniform_set_prepare_for_use_instruction->shader, uniform_set_prepare_for_use_instruction->set_index);
 				instruction_data_cursor += sizeof(DrawListUniformSetPrepareForUseInstruction);
 			} break;
+
 			default:
 				DEV_ASSERT(false && "Unknown draw list instruction type.");
 				return;
@@ -1430,26 +1504,36 @@ void RenderingDeviceGraph::_print_draw_list(const uint8_t *p_instruction_data, u
 				print_line("\tBIND INDEX BUFFER ID", itos(bind_index_buffer_instruction->buffer.id), "FORMAT", bind_index_buffer_instruction->format, "OFFSET", bind_index_buffer_instruction->offset);
 				instruction_data_cursor += sizeof(DrawListBindIndexBufferInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_BIND_PIPELINE: {
 				const DrawListBindPipelineInstruction *bind_pipeline_instruction = reinterpret_cast<const DrawListBindPipelineInstruction *>(instruction);
 				print_line("\tBIND PIPELINE ID", itos(bind_pipeline_instruction->pipeline.id));
 				instruction_data_cursor += sizeof(DrawListBindPipelineInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_BIND_UNIFORM_SETS: {
 				const DrawListBindUniformSetsInstruction *bind_uniform_sets_instruction = reinterpret_cast<const DrawListBindUniformSetsInstruction *>(instruction);
 				print_line("\tBIND UNIFORM SETS COUNT", bind_uniform_sets_instruction->set_count);
 				for (uint32_t i = 0; i < bind_uniform_sets_instruction->set_count; i++) {
-					print_line("\tBIND UNIFORM SET ID", itos(bind_uniform_sets_instruction->uniform_set_ids()[i].id), "START INDEX", bind_uniform_sets_instruction->first_set_index, "DYNAMIC_OFFSETS", bind_uniform_sets_instruction->dynamic_offsets_mask);
+					print_line("\tBIND UNIFORM SET ID", itos(bind_uniform_sets_instruction->uniform_set_ids()[i].id), "START INDEX", bind_uniform_sets_instruction->first_set_index);
 				}
-				instruction_data_cursor += sizeof(DrawListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				for (uint32_t i = 0; i < bind_uniform_sets_instruction->dynamic_offset_count; i++) {
+					print_line("\tDYNAMIC OFFSET", itos(bind_uniform_sets_instruction->dynamic_offsets()[i]));
+				}
+				instruction_data_cursor += sizeof(DrawListBindUniformSetsInstruction);
+				instruction_data_cursor += sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				instruction_data_cursor += sizeof(uint32_t) * bind_uniform_sets_instruction->dynamic_offset_count;
 			} break;
+
 			case DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS: {
 				const DrawListBindVertexBuffersInstruction *bind_vertex_buffers_instruction = reinterpret_cast<const DrawListBindVertexBuffersInstruction *>(instruction);
 				print_line("\tBIND VERTEX BUFFERS COUNT", bind_vertex_buffers_instruction->vertex_buffers_count);
 				instruction_data_cursor += sizeof(DrawListBindVertexBuffersInstruction);
 				instruction_data_cursor += sizeof(RDD::BufferID) * bind_vertex_buffers_instruction->vertex_buffers_count;
 				instruction_data_cursor += sizeof(uint64_t) * bind_vertex_buffers_instruction->vertex_buffers_count;
+				instruction_data_cursor += sizeof(uint32_t) * bind_vertex_buffers_instruction->dynamic_offset_count;
 			} break;
+
 			case DrawListInstruction::TYPE_CLEAR_ATTACHMENTS: {
 				const DrawListClearAttachmentsInstruction *clear_attachments_instruction = reinterpret_cast<const DrawListClearAttachmentsInstruction *>(instruction);
 				print_line("\tATTACHMENTS CLEAR COUNT", clear_attachments_instruction->attachments_clear_count, "RECT COUNT", clear_attachments_instruction->attachments_clear_rect_count);
@@ -1457,65 +1541,109 @@ void RenderingDeviceGraph::_print_draw_list(const uint8_t *p_instruction_data, u
 				instruction_data_cursor += sizeof(RDD::AttachmentClear) * clear_attachments_instruction->attachments_clear_count;
 				instruction_data_cursor += sizeof(Rect2i) * clear_attachments_instruction->attachments_clear_rect_count;
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW: {
 				const DrawListDrawInstruction *draw_instruction = reinterpret_cast<const DrawListDrawInstruction *>(instruction);
 				print_line("\tDRAW VERTICES", draw_instruction->vertex_count, "INSTANCES", draw_instruction->instance_count);
 				instruction_data_cursor += sizeof(DrawListDrawInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW_INDEXED: {
 				const DrawListDrawIndexedInstruction *draw_indexed_instruction = reinterpret_cast<const DrawListDrawIndexedInstruction *>(instruction);
 				print_line("\tDRAW INDICES", draw_indexed_instruction->index_count, "INSTANCES", draw_indexed_instruction->instance_count, "FIRST INDEX", draw_indexed_instruction->first_index);
 				instruction_data_cursor += sizeof(DrawListDrawIndexedInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW_INDIRECT: {
 				const DrawListDrawIndirectInstruction *draw_indirect_instruction = reinterpret_cast<const DrawListDrawIndirectInstruction *>(instruction);
 				print_line("\tDRAW INDIRECT BUFFER ID", itos(draw_indirect_instruction->buffer.id), "OFFSET", draw_indirect_instruction->offset, "DRAW COUNT", draw_indirect_instruction->draw_count, "STRIDE", draw_indirect_instruction->stride);
 				instruction_data_cursor += sizeof(DrawListDrawIndirectInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT: {
 				const DrawListDrawIndexedIndirectInstruction *draw_indexed_indirect_instruction = reinterpret_cast<const DrawListDrawIndexedIndirectInstruction *>(instruction);
 				print_line("\tDRAW INDEXED INDIRECT BUFFER ID", itos(draw_indexed_indirect_instruction->buffer.id), "OFFSET", draw_indexed_indirect_instruction->offset, "DRAW COUNT", draw_indexed_indirect_instruction->draw_count, "STRIDE", draw_indexed_indirect_instruction->stride);
 				instruction_data_cursor += sizeof(DrawListDrawIndexedIndirectInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_EXECUTE_COMMANDS: {
 				print_line("\tEXECUTE COMMANDS");
 				instruction_data_cursor += sizeof(DrawListExecuteCommandsInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_NEXT_SUBPASS: {
 				print_line("\tNEXT SUBPASS");
 				instruction_data_cursor += sizeof(DrawListNextSubpassInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_BLEND_CONSTANTS: {
 				const DrawListSetBlendConstantsInstruction *set_blend_constants_instruction = reinterpret_cast<const DrawListSetBlendConstantsInstruction *>(instruction);
 				print_line("\tSET BLEND CONSTANTS COLOR", set_blend_constants_instruction->color);
 				instruction_data_cursor += sizeof(DrawListSetBlendConstantsInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_LINE_WIDTH: {
 				const DrawListSetLineWidthInstruction *set_line_width_instruction = reinterpret_cast<const DrawListSetLineWidthInstruction *>(instruction);
 				print_line("\tSET LINE WIDTH", set_line_width_instruction->width);
 				instruction_data_cursor += sizeof(DrawListSetLineWidthInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_PUSH_CONSTANT: {
 				const DrawListSetPushConstantInstruction *set_push_constant_instruction = reinterpret_cast<const DrawListSetPushConstantInstruction *>(instruction);
 				print_line("\tSET PUSH CONSTANT SIZE", set_push_constant_instruction->size);
 				instruction_data_cursor += sizeof(DrawListSetPushConstantInstruction);
 				instruction_data_cursor += set_push_constant_instruction->size;
 			} break;
+
 			case DrawListInstruction::TYPE_SET_SCISSOR: {
 				const DrawListSetScissorInstruction *set_scissor_instruction = reinterpret_cast<const DrawListSetScissorInstruction *>(instruction);
 				print_line("\tSET SCISSOR", set_scissor_instruction->rect);
 				instruction_data_cursor += sizeof(DrawListSetScissorInstruction);
 			} break;
+
 			case DrawListInstruction::TYPE_SET_VIEWPORT: {
 				const DrawListSetViewportInstruction *set_viewport_instruction = reinterpret_cast<const DrawListSetViewportInstruction *>(instruction);
 				print_line("\tSET VIEWPORT", set_viewport_instruction->rect);
 				instruction_data_cursor += sizeof(DrawListSetViewportInstruction);
 			} break;
+
+			case DrawListInstruction::TYPE_SET_STENCIL_MASKS: {
+				const DrawListSetStencilMasksInstruction *set_stencil_masks_instruction = reinterpret_cast<const DrawListSetStencilMasksInstruction *>(instruction);
+				print_line("\tSET STENCIL MASK",
+					set_stencil_masks_instruction->face_mask,
+					"REFERENCE", set_stencil_masks_instruction->reference,
+					"COMPARE MASK", set_stencil_masks_instruction->compare_mask,
+					"WRITE MASK", set_stencil_masks_instruction->write_mask);
+				instruction_data_cursor += sizeof(DrawListSetStencilMasksInstruction);
+			} break;
+
+#ifdef EXTENDED_DYNAMIC_STATE
+
+			case DrawListInstruction::TYPE_SET_STENCIL_ENABLED: {
+				const DrawListSetStencilEnabledInstruction *set_stencil_enabled_instruction = reinterpret_cast<const DrawListSetStencilEnabledInstruction *>(instruction);
+				print_line("\tSET STENCIL TEST ENABLED", set_stencil_enabled_instruction->enabled);
+				instruction_data_cursor += sizeof(DrawListSetStencilEnabledInstruction);
+			} break;
+
+			case DrawListInstruction::TYPE_SET_STENCIL_OPERATORS: {
+				const DrawListSetStencilOperatorsInstruction *set_stencil_operators_instruction = reinterpret_cast<const DrawListSetStencilOperatorsInstruction *>(instruction);
+				print_line("\tSET STENCIL OPERATOR",
+					set_stencil_operators_instruction->face_mask,
+					"FAIL", set_stencil_operators_instruction->fail,
+					"PASS", set_stencil_operators_instruction->pass,
+					"DEPTH FAIL", set_stencil_operators_instruction->depth_fail,
+					"COMPARE", set_stencil_operators_instruction->compare);
+				instruction_data_cursor += sizeof(DrawListSetStencilOperatorsInstruction);
+			} break;
+
+#endif // EXTENDED_DYNAMIC_STATE
+
 			case DrawListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE: {
 				const DrawListUniformSetPrepareForUseInstruction *uniform_set_prepare_for_use_instruction = reinterpret_cast<const DrawListUniformSetPrepareForUseInstruction *>(instruction);
 				print_line("\tUNIFORM SET PREPARE FOR USE ID", itos(uniform_set_prepare_for_use_instruction->uniform_set.id), "SHADER ID", itos(uniform_set_prepare_for_use_instruction->shader.id), "INDEX", uniform_set_prepare_for_use_instruction->set_index);
 				instruction_data_cursor += sizeof(DrawListUniformSetPrepareForUseInstruction);
 			} break;
+
 			default:
 				DEV_ASSERT(false && "Unknown draw list instruction type.");
 				return;
@@ -1541,9 +1669,14 @@ void RenderingDeviceGraph::_print_compute_list(const uint8_t *p_instruction_data
 				const ComputeListBindUniformSetsInstruction *bind_uniform_sets_instruction = reinterpret_cast<const ComputeListBindUniformSetsInstruction *>(instruction);
 				print_line("\tBIND UNIFORM SETS COUNT", bind_uniform_sets_instruction->set_count);
 				for (uint32_t i = 0; i < bind_uniform_sets_instruction->set_count; i++) {
-					print_line("\tBIND UNIFORM SET ID", itos(bind_uniform_sets_instruction->uniform_set_ids()[i].id), "START INDEX", bind_uniform_sets_instruction->first_set_index, "DYNAMIC_OFFSETS", bind_uniform_sets_instruction->dynamic_offsets_mask);
+					print_line("\tBIND UNIFORM SET ID", itos(bind_uniform_sets_instruction->uniform_set_ids()[i].id), "START INDEX", bind_uniform_sets_instruction->first_set_index);
 				}
-				instruction_data_cursor += sizeof(ComputeListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				for (uint32_t i = 0; i < bind_uniform_sets_instruction->dynamic_offset_count; i++) {
+					print_line("\tDYNAMIC OFFSET", itos(bind_uniform_sets_instruction->dynamic_offsets()[i]));
+				}
+				instruction_data_cursor += sizeof(ComputeListBindUniformSetsInstruction);
+				instruction_data_cursor += sizeof(RDD::UniformSetID) * bind_uniform_sets_instruction->set_count;
+				instruction_data_cursor += sizeof(uint32_t) * bind_uniform_sets_instruction->dynamic_offset_count;
 			} break;
 			case ComputeListInstruction::TYPE_DISPATCH: {
 				const ComputeListDispatchInstruction *dispatch_instruction = reinterpret_cast<const ComputeListDispatchInstruction *>(instruction);
@@ -1757,17 +1890,24 @@ void RenderingDeviceGraph::add_compute_list_bind_uniform_set(RDD::ShaderID p_sha
 void RenderingDeviceGraph::add_compute_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_set_index, uint32_t p_set_count) {
 	DEV_ASSERT(p_uniform_sets.size() >= p_set_count);
 
-	uint32_t instruction_size = sizeof(ComputeListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * p_set_count;
+	LocalVector<uint32_t> dynamic_offsets = driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_set_index, p_set_count);
+	
+	uint32_t instruction_size = sizeof(ComputeListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * p_set_count + sizeof(uint32_t) * dynamic_offsets.size();
 	ComputeListBindUniformSetsInstruction *instruction = reinterpret_cast<ComputeListBindUniformSetsInstruction *>(_allocate_compute_list_instruction(instruction_size));
 	instruction->type = ComputeListInstruction::TYPE_BIND_UNIFORM_SETS;
 	instruction->shader = p_shader;
 	instruction->first_set_index = p_first_set_index;
 	instruction->set_count = p_set_count;
-	instruction->dynamic_offsets_mask = driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_set_index, p_set_count);
 
 	RDD::UniformSetID *ids = instruction->uniform_set_ids();
 	for (uint32_t i = 0; i < p_set_count; i++) {
 		ids[i] = p_uniform_sets[i];
+	}
+	
+	uint32_t *offsets = instruction->dynamic_offsets();
+	instruction->dynamic_offset_count = dynamic_offsets.size();
+	for (uint32_t i = 0; i < dynamic_offsets.size(); i++) {
+		offsets[i] = dynamic_offsets[i];
 	}
 }
 
@@ -1869,40 +2009,55 @@ void RenderingDeviceGraph::add_draw_list_bind_pipeline(RDD::PipelineID p_pipelin
 	draw_instruction_list.stages = draw_instruction_list.stages | p_pipeline_stage_bits;
 }
 
-void RenderingDeviceGraph::add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index) {
-	add_draw_list_bind_uniform_sets(p_shader, VectorView(&p_uniform_set, 1), set_index, 1);
+void RenderingDeviceGraph::add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t p_set_index, VectorView<int> p_dynamic_frames) {
+	add_draw_list_bind_uniform_sets(p_shader, VectorView(&p_uniform_set, 1), p_set_index, 1, p_dynamic_frames);
 }
 
-void RenderingDeviceGraph::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count) {
+void RenderingDeviceGraph::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_sets, uint32_t p_first_index, uint32_t p_set_count, VectorView<int> p_dynamic_frames) {
 	DEV_ASSERT(p_uniform_sets.size() >= p_set_count);
 
-	uint32_t instruction_size = sizeof(DrawListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * p_set_count;
+	LocalVector<uint32_t> dynamic_offsets = driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_index, p_set_count, p_dynamic_frames);
+
+	uint32_t instruction_size = sizeof(DrawListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * p_set_count + sizeof(uint32_t) * dynamic_offsets.size();
 	DrawListBindUniformSetsInstruction *instruction = reinterpret_cast<DrawListBindUniformSetsInstruction *>(_allocate_draw_list_instruction(instruction_size));
 	instruction->type = DrawListInstruction::TYPE_BIND_UNIFORM_SETS;
 	instruction->shader = p_shader;
 	instruction->first_set_index = p_first_index;
 	instruction->set_count = p_set_count;
-	instruction->dynamic_offsets_mask = driver->uniform_sets_get_dynamic_offsets(p_uniform_sets, p_shader, p_first_index, p_set_count);
 
 	for (uint32_t i = 0; i < p_set_count; i++) {
 		instruction->uniform_set_ids()[i] = p_uniform_sets[i];
+	}
+
+	uint32_t *offsets = instruction->dynamic_offsets();
+	instruction->dynamic_offset_count = dynamic_offsets.size();
+	for (uint32_t i = 0; i < dynamic_offsets.size(); i++) {
+		offsets[i] = dynamic_offsets[i];
 	}
 }
 
 void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets) {
 	DEV_ASSERT(p_vertex_buffers.size() == p_vertex_buffer_offsets.size());
 
-	uint32_t instruction_size = sizeof(DrawListBindVertexBuffersInstruction) + sizeof(RDD::BufferID) * p_vertex_buffers.size() + sizeof(uint64_t) * p_vertex_buffer_offsets.size();
+	LocalVector<uint32_t> dynamic_offsets = driver->buffer_get_dynamic_offsets(p_vertex_buffers);
+
+	uint32_t instruction_size = sizeof(DrawListBindVertexBuffersInstruction) + sizeof(RDD::BufferID) * p_vertex_buffers.size() + sizeof(uint64_t) * p_vertex_buffer_offsets.size() + sizeof(uint32_t) * dynamic_offsets.size();
 	DrawListBindVertexBuffersInstruction *instruction = reinterpret_cast<DrawListBindVertexBuffersInstruction *>(_allocate_draw_list_instruction(instruction_size));
 	instruction->type = DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS;
 	instruction->vertex_buffers_count = p_vertex_buffers.size();
-	instruction->dynamic_offsets_mask = driver->buffer_get_dynamic_offsets(p_vertex_buffers);
+	// instruction->dynamic_offsets_mask = driver->buffer_get_dynamic_offsets(p_vertex_buffers);
 
 	RDD::BufferID *vertex_buffers = instruction->vertex_buffers();
 	uint64_t *vertex_buffer_offsets = instruction->vertex_buffer_offsets();
 	for (uint32_t i = 0; i < instruction->vertex_buffers_count; i++) {
 		vertex_buffers[i] = p_vertex_buffers[i];
 		vertex_buffer_offsets[i] = p_vertex_buffer_offsets[i];
+	}
+
+	uint32_t *offsets = instruction->dynamic_offsets();
+	instruction->dynamic_offset_count = dynamic_offsets.size();
+	for (uint32_t i = 0; i < dynamic_offsets.size(); i++) {
+		offsets[i] = dynamic_offsets[i];
 	}
 
 	if (instruction->vertex_buffers_count > 0) {
@@ -2007,6 +2162,35 @@ void RenderingDeviceGraph::add_draw_list_set_viewport(Rect2i p_rect) {
 	instruction->type = DrawListInstruction::TYPE_SET_VIEWPORT;
 	instruction->rect = p_rect;
 }
+
+void RenderingDeviceGraph::add_draw_list_set_stencil_masks(RDD::StencilFace p_face_mask, uint32_t p_reference, uint32_t p_compare_mask, uint32_t p_write_mask) {
+	DrawListSetStencilMasksInstruction *instruction = reinterpret_cast<DrawListSetStencilMasksInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetStencilMasksInstruction)));
+	instruction->type = DrawListInstruction::TYPE_SET_STENCIL_MASKS;
+	instruction->face_mask = p_face_mask;
+	instruction->reference = p_reference;
+	instruction->compare_mask = p_compare_mask;
+	instruction->write_mask = p_write_mask;
+}
+
+#ifdef EXTENDED_DYNAMIC_STATE
+
+void RenderingDeviceGraph::add_draw_list_set_stencil_enabled(bool p_enabled) {
+	DrawListSetStencilEnabledInstruction *instruction = reinterpret_cast<DrawListSetStencilEnabledInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetStencilEnabledInstruction)));
+	instruction->type = DrawListInstruction::TYPE_SET_STENCIL_ENABLED;
+	instruction->enabled = p_enabled;
+}
+
+void RenderingDeviceGraph::add_draw_list_set_stencil_operators(RDD::StencilFace p_face_mask, RDD::StencilOperation p_fail, RDD::StencilOperation p_pass, RDD::StencilOperation p_depth_fail, RDD::CompareOperator p_compare) {
+	DrawListSetStencilOperatorsInstruction *instruction = reinterpret_cast<DrawListSetStencilOperatorsInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetStencilOperatorsInstruction)));
+	instruction->type = DrawListInstruction::TYPE_SET_STENCIL_OPERATORS;
+	instruction->face_mask = p_face_mask;
+	instruction->fail = p_fail;
+	instruction->pass = p_pass;
+	instruction->depth_fail = p_depth_fail;
+	instruction->compare = p_compare;
+}
+
+#endif // EXTENDED_DYNAMIC_STATE
 
 void RenderingDeviceGraph::add_draw_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index) {
 	DrawListUniformSetPrepareForUseInstruction *instruction = reinterpret_cast<DrawListUniformSetPrepareForUseInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListUniformSetPrepareForUseInstruction)));

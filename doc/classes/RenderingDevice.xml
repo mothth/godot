@@ -323,6 +323,7 @@
 			<param index="0" name="draw_list" type="int" />
 			<param index="1" name="uniform_set" type="RID" />
 			<param index="2" name="set_index" type="int" />
+			<param index="3" name="dynamic_frames" type="PackedInt32Array" default="PackedInt32Array()" />
 			<description>
 				Binds [param uniform_set] to the specified [param draw_list]. A [param set_index] must also be specified, which is an identifier starting from [code]0[/code] that must match the one expected by the draw list.
 			</description>
@@ -1101,6 +1102,7 @@
 			<param index="0" name="size_bytes" type="int" />
 			<param index="1" name="data" type="PackedByteArray" default="PackedByteArray()" />
 			<param index="2" name="creation_bits" type="int" enum="RenderingDevice.BufferCreationBits" is_bitfield="true" default="0" />
+			<param index="3" name="frames" type="int" default="0" />
 			<description>
 				Creates a new uniform buffer. It can be accessed with the RID that is returned.
 				Once finished with your RID, you will want to free the RID using the RenderingDevice's [method free_rid] method.
@@ -2449,6 +2451,10 @@
 		<constant name="DYNAMIC_STATE_STENCIL_WRITE_MASK" value="32" enum="PipelineDynamicStateFlags" is_bitfield="true">
 		</constant>
 		<constant name="DYNAMIC_STATE_STENCIL_REFERENCE" value="64" enum="PipelineDynamicStateFlags" is_bitfield="true">
+		</constant>
+		<constant name="DYNAMIC_STATE_STENCIL_TEST" value="128" enum="PipelineDynamicStateFlags" is_bitfield="true">
+		</constant>
+		<constant name="DYNAMIC_STATE_STENCIL_OP" value="256" enum="PipelineDynamicStateFlags" is_bitfield="true">
 		</constant>
 		<constant name="INITIAL_ACTION_LOAD" value="0" enum="InitialAction" deprecated="Initial actions are solved automatically by RenderingDevice.">
 			Load the previous contents of the framebuffer.

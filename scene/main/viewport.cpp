@@ -571,18 +571,6 @@ void Viewport::_on_settings_changed() {
 void Viewport::_find_parent() {
 	if (get_parent()) {
 		parent = get_parent()->get_viewport();
-		if (parent == this || parent == nullptr) {
-			// SubWorld case
-			Node *node_parent = get_parent();
-			while (node_parent) {
-				SubWorld *sub_world = Object::cast_to<SubWorld>(node_parent);
-				if (sub_world) {
-					parent = sub_world->get_parent()->get_viewport();
-					break;
-				}
-				node_parent = node_parent->get_parent();
-			}
-		} 
 		if (parent != nullptr) {
 			RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, parent->get_viewport_rid());
 		}
@@ -608,7 +596,7 @@ void Viewport::_notification(int p_what) {
 #ifndef _3D_DISABLED
 			Ref<World3D> world = find_world_3d();
 			if (world.is_valid()) {
-				world->_register_viewport(this);
+				// world->_register_viewport(this);
 				RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 				_update_audio_listener_3d();
 			}
@@ -672,13 +660,6 @@ void Viewport::_notification(int p_what) {
 		case NOTIFICATION_EXIT_TREE: {
 			_gui_cancel_tooltip();
 
-#ifndef _3D_DISABLED
-			Ref<World3D> world = find_world_3d();
-			if (world.is_valid()) {
-				world->_remove_viewport(this);
-			}
-#endif // _3D_DISABLED
-
 			RenderingServer::get_singleton()->viewport_set_scenario(viewport, RID());
 			RenderingServer::get_singleton()->viewport_remove_canvas(viewport, current_canvas);
 #ifndef PHYSICS_2D_DISABLED
@@ -709,7 +690,7 @@ void Viewport::_notification(int p_what) {
 				if (parent && !world_3d.is_valid() && !own_world_3d.is_valid()) {
 					Ref<World3D> world = parent->find_world_3d();
 					if (world.is_valid()) {
-						world->_register_viewport(this);
+						// world->_register_viewport(this);
 						RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 						_update_audio_listener_3d();
 					}
@@ -719,12 +700,14 @@ void Viewport::_notification(int p_what) {
 
 		case NOTIFICATION_EXIT_VIEWPORT: {
 			if (parent) {
+				/*
 				if (!world_3d.is_valid() && !own_world_3d.is_valid()) {
 					Ref<World3D> parent_world = parent->find_world_3d();
 					if (parent_world.is_valid()) {
 						parent_world->_remove_viewport(this);
 					}
 				}
+				*/
 				parent = nullptr;
 			}		
 			RenderingServer::get_singleton()->viewport_set_parent_viewport(viewport, RID());
@@ -2739,7 +2722,7 @@ Window *Viewport::get_base_window() {
 
 	Viewport *v = this;
 	Window *w = Object::cast_to<Window>(v);
-	while (!w) {
+	while (!w && v) {
 		v = v->get_parent_viewport();
 		w = Object::cast_to<Window>(v);
 	}
@@ -4760,7 +4743,7 @@ void Viewport::set_world_3d(const Ref<World3D> &p_world_3d) {
 	Ref<World3D> world = find_world_3d();
 	if (is_inside_tree() && world.is_valid()) {
 		_propagate_exit_world_3d(this);
-		world->_remove_viewport(this);
+		// world->_remove_viewport(this);
 	}
 
 	if (own_world_3d.is_valid() && world_3d.is_valid()) {
@@ -4783,7 +4766,7 @@ void Viewport::set_world_3d(const Ref<World3D> &p_world_3d) {
 	world = find_world_3d();
 	if (is_inside_tree() && world.is_valid()) {
 		_propagate_enter_world_3d(this);
-		world->_register_viewport(this);
+		// world->_register_viewport(this);
 		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
@@ -4795,7 +4778,7 @@ void Viewport::_own_world_3d_changed() {
 	ERR_FAIL_COND(own_world_3d.is_null());
 
 	if (is_inside_tree()) {
-		own_world_3d->_remove_viewport(this);
+		// own_world_3d->_remove_viewport(this);
 		_propagate_exit_world_3d(this);
 	}
 
@@ -4805,7 +4788,7 @@ void Viewport::_own_world_3d_changed() {
 	Ref<World3D> world = find_world_3d();
 	if (is_inside_tree() && world.is_valid()) {
 		_propagate_enter_world_3d(this);
-		world->_register_viewport(this);
+		// world->_register_viewport(this);
 		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
@@ -4820,7 +4803,7 @@ void Viewport::set_use_own_world_3d(bool p_use_own_world_3d) {
 
 	Ref<World3D> world = find_world_3d();	
 	if (is_inside_tree() && world.is_valid()) {
-		world->_remove_viewport(this);
+		// world->_remove_viewport(this);
 		_propagate_exit_world_3d(this);
 	}
 
@@ -4843,7 +4826,7 @@ void Viewport::set_use_own_world_3d(bool p_use_own_world_3d) {
 	world = find_world_3d();	
 	if (is_inside_tree() && world.is_valid()) {
 		_propagate_enter_world_3d(this);
-		world->_register_viewport(this);
+		// world->_register_viewport(this);
 		RenderingServer::get_singleton()->viewport_set_scenario(viewport, world->get_scenario());
 	}
 
@@ -4864,6 +4847,8 @@ void Viewport::_propagate_enter_world_3d(Node *p_node) {
 		if (Object::cast_to<Node3D>(p_node) || Object::cast_to<WorldEnvironment>(p_node)) {
 			p_node->notification(Node3D::NOTIFICATION_ENTER_WORLD);
 		} else if (Object::cast_to<SubWorld>(p_node)) {
+			SubWorld *sub_world = static_cast<SubWorld *>(p_node);
+			sub_world->_viewport_entered_world_3d();
 			return;
 		} else {
 			Viewport *v = Object::cast_to<Viewport>(p_node);
@@ -4889,6 +4874,8 @@ void Viewport::_propagate_exit_world_3d(Node *p_node) {
 		if (Object::cast_to<Node3D>(p_node) || Object::cast_to<WorldEnvironment>(p_node)) {
 			p_node->notification(Node3D::NOTIFICATION_EXIT_WORLD);
 		} else if (Object::cast_to<SubWorld>(p_node)) {
+			SubWorld *sub_world = static_cast<SubWorld *>(p_node);
+			sub_world->_viewport_exited_world_3d();
 			return;
 		} else {
 			Viewport *v = Object::cast_to<Viewport>(p_node);

@@ -47,18 +47,6 @@ void World3D::_remove_camera(Camera3D *p_camera) {
 	cameras.erase(p_camera);
 }
 
-void World3D::_register_viewport(Viewport *p_viewport) {
-	viewports.insert(p_viewport);
-	// Notify SubWorlds of this
-	for (auto sub_world : sub_worlds) {
-		sub_world->_new_available_viewport(p_viewport);
-	}
-}
-
-void World3D::_remove_viewport(Viewport *p_viewport) {
-	viewports.erase(p_viewport);
-}
-
 void World3D::_register_sub_world(SubWorld *p_sub_world) {
 	sub_worlds.insert(p_sub_world);
 }

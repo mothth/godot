@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <class name="SubWorld" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
-		Constrains child nodes to a specific [World3D] rather than a [Viewport].
+		Constrains child nodes to a specific [World3D] other than what is used by its [Viewport].
 	</brief_description>
 	<description>
 		A [SubWorld] contrains its children to a specific [World3D] and creates a disconnect from any given [Viewport].
-		This allows nodes to change viewport but remain in the same world without ever leaving the tree. This is unlike usual nodes, which can change world without leaving the tree but cannot change viewports without doing so.
-		[SubWorld] can only leave its children in a state of no [Viewport], a [World3D] will always be provided to the children.
+		Originally, this node was used to manage portals how they used to be implemented in a prototype version of The Story Machine,
+		but portals were later implemented in the engine itself. This node used to be capable of switching [Viewport]s of children without ever leaving the tree.
+		This behaviour was very buggy. With the new portal implementation, child nodes simply use the parent [Viewport] of the [SubWorld] instead.
 
-		[SubWorld] was made for The Story Machine, and therefore is only intended for 3D and does not have a 2D counterpart. However, with 3D disabled, you can still use [SubWorld] as a means of switching viewports for child nodes using the [member force_viewport] member.
-		World2D support might be considered in the future.
+		[b]Note:[/b] This node means that [method Viewport.find_world_3d] from [method Node.get_viewport] may no longer return the actual [World3D] of the node.
+		Use [method Node3D.get_world_3d] in order to obtain the correct [World3D].
 	</description>
 	<methods>
 		<method name="find_world_3d" qualifiers="const">
@@ -23,12 +24,13 @@
 		<member name="world_3d" type="World3D" setter="set_world_3d" getter="get_world_3d">
 			The [World3D] to bind to. If this is not defined, the [World3D] from the parent [Viewport] in the tree will be taken instead.
 		</member>
-		<member name="force_viewport" type="Viewport" setter="set_force_viewport" getter="get_force_viewport">
-			The [Viewport] to force the [SubWorld] to use. The given [Viewport] must use the same world as [member world_3d], if it is defined. If [member world_3d] is not defined, then any [Viewport] can be used and the [World3D] will be taken from it.
+		<member name="force_viewport" type="Viewport" setter="set_force_viewport" getter="get_force_viewport" deprecated="Used in the old implementation. This will no longer have any effect.">
+			The [Viewport] to force the [SubWorld] to use. The given [Viewport] must use the same world as [member world_3d], if it is defined.
+			If [member world_3d] is not defined, then any [Viewport] can be used and the [World3D] will be taken from it.
 		</member>
 	</members>
 	<signals>
-		<signal name="viewport_changed">
+		<signal name="viewport_changed" deprecated="Used in the old implementation. This will no longer be emitted by the node.">
 			<description>
 				Emitted when the main [Viewport] of the [SubWorld] is changed.
 			</description>

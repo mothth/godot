@@ -33,6 +33,8 @@
 #include "render_scene_buffers.h"
 #include "servers/rendering/rendering_server.h"
 
+struct PortalMaskData; // Forward declaration, see portal_storage.h
+
 class RendererLightStorage {
 public:
 	virtual ~RendererLightStorage() {}
@@ -96,9 +98,12 @@ public:
 	virtual void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) = 0;
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) = 0;
 	virtual void light_instance_mark_visible(RID p_light_instance) = 0;
+	virtual void light_instance_set_portal_mask(RID p_light_instance, const PortalMaskData *p_mask) = 0;
+	
 	virtual bool light_instances_can_render_shadow_cube() const {
 		return true;
 	}
+	
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light, const Vector3 &p_position) const = 0;
 
 	/* PROBE API */
@@ -154,6 +159,7 @@ public:
 	virtual bool reflection_probe_instance_end_render(RID p_instance, RID p_reflection_atlas) = 0;
 	virtual Ref<RenderSceneBuffers> reflection_probe_atlas_get_render_buffers(RID p_reflection_atlas) = 0;
 	virtual bool reflection_probe_instance_postprocess_step(RID p_instance) = 0;
+	virtual void reflection_probe_instance_set_portal_mask(RID p_instance, const PortalMaskData *p_mask) = 0;
 
 	/* LIGHTMAP  */
 

@@ -397,6 +397,10 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 		return output_volume_vector;
 	}
 
+	if (!camera) {
+		return output_volume_vector;
+	}
+
 #ifndef PHYSICS_3D_DISABLED
 	PhysicsDirectSpaceState3D *space_state = PhysicsServer3D::get_singleton()->space_get_direct_state(world_3d->get_space());
 #endif // PHYSICS_3D_DISABLED

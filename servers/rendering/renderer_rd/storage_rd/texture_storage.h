@@ -38,6 +38,8 @@
 #include "servers/rendering/storage/texture_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+class RenderDataRD; // Forward declaration - see render_data_rd.h
+
 namespace RendererRD {
 
 class LightStorage;
@@ -312,9 +314,14 @@ private:
 		float sorting_offset = 0.0;
 		uint32_t cull_mask = 0;
 		RendererRD::ForwardID forward_id = -1;
+		const PortalMaskData *portal_mask = nullptr;
+		PortalMaskData *parity_mask = nullptr;
 	};
 
 	mutable RID_Owner<DecalInstance> decal_instance_owner;
+
+	// Pool for additional portal masks if needed while updating decal buffers
+	PagedArrayPool<PortalMaskData> parity_mask_pool;
 
 	/* DECAL DATA (UBO) */
 
@@ -340,6 +347,7 @@ private:
 		float depth;
 		DecalInstance *decal_instance;
 		Decal *decal;
+		int portal_index;
 		bool operator<(const DecalInstanceSort &p_sort) const {
 			return depth < p_sort.depth;
 		}
@@ -707,6 +715,7 @@ public:
 	virtual void decal_instance_free(RID p_decal_instance) override;
 	virtual void decal_instance_set_transform(RID p_decal_instance, const Transform3D &p_transform) override;
 	virtual void decal_instance_set_sorting_offset(RID p_decal_instance, float p_sorting_offset) override;
+	virtual void decal_instance_set_portal_mask(RID p_decal_instance, const PortalMaskData *p_mask) override;
 
 	_FORCE_INLINE_ RID decal_instance_get_base(RID p_decal_instance) const {
 		DecalInstance *di = decal_instance_owner.get_or_null(p_decal_instance);
@@ -738,7 +747,7 @@ public:
 	void free_decal_data();
 	void set_max_decals(const uint32_t p_max_decals);
 	RID get_decal_buffer() { return decal_buffer; }
-	void update_decal_buffer(const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform);
+	void update_decal_buffer(RenderDataRD *p_render_data, const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform);
 
 	/* RENDER TARGET API */
 

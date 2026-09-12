@@ -32,6 +32,8 @@
 
 #include "core/templates/paged_allocator.h"
 #include "servers/rendering/multi_uma_buffer.h"
+#include "servers/rendering/renderer_rd/dynamic_buffer.h"
+#include "servers/rendering/renderer_rd/layout_rules.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #ifdef METAL_ENABLED
@@ -175,7 +177,7 @@ private:
 
 	void _update_render_base_uniform_set();
 	RID _setup_sdfgi_render_pass_uniform_set(RID p_albedo_texture, RID p_emission_texture, RID p_emission_aniso_texture, RID p_geom_facing_texture, const RendererRD::MaterialStorage::Samplers &p_samplers);
-	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas = false, int p_index = 0);
+	RID _setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas = false, bool p_shadows = false, int p_index = 0);
 
 	struct BestFitNormal {
 		BestFitNormalShaderRD shader;
@@ -211,17 +213,29 @@ private:
 	};
 
 	struct GeometryInstanceSurfaceDataCache;
+	struct GeometryInstanceSurfaceRenderElement;
 	struct RenderElementInfo;
 
 	struct RenderListParameters {
-		GeometryInstanceSurfaceDataCache **elements = nullptr;
+		GeometryInstanceSurfaceRenderElement *elements = nullptr;
 		RenderElementInfo *element_info = nullptr;
+
 		int element_count = 0;
 		bool reverse_cull = false;
+		bool portal_stencil = false;
+		bool override_camera = false;
+		bool no_gi = false;
+
 		PassMode pass_mode = PASS_MODE_COLOR;
 		uint32_t color_pass_flags = 0;
-		bool no_gi = false;
+
 		uint32_t view_count = 1;
+
+		// The scene data frame to use. If -1, we use whatever is specified by the instance.
+		// Otherwise, if `override_camera` is false, instances without this index are skipped entirely.
+		// If `portal_stencil` is true, this is also the stencil we use.
+		int camera_index = -1;
+
 		RID render_pass_uniform_set;
 		bool force_wireframe = false;
 		Vector2 uv_offset;
@@ -230,9 +244,10 @@ private:
 		RD::FramebufferFormatID framebuffer_format = 0;
 		uint32_t element_offset = 0;
 		bool use_directional_soft_shadow = false;
+
 		SceneShaderForwardClustered::ShaderSpecialization base_specialization = {};
 
-		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}) {
+		RenderListParameters(GeometryInstanceSurfaceRenderElement *p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}, int p_camera_index = -1, bool p_portal_stencil = false) {
 			elements = p_elements;
 			element_info = p_element_info;
 			element_count = p_element_count;
@@ -249,6 +264,8 @@ private:
 			element_offset = p_element_offset;
 			use_directional_soft_shadow = p_use_directional_soft_shadows;
 			base_specialization = p_base_specialization;
+			camera_index = p_camera_index;
+			portal_stencil = p_portal_stencil;
 		}
 	};
 
@@ -286,30 +303,57 @@ private:
 	};
 
 	struct SceneState {
-		// This struct is loaded into Set 1 - Binding 1, populated at start of rendering a frame, must match with shader code
-		struct UBO {
-			uint32_t cluster_shift;
-			uint32_t cluster_width;
-			uint32_t cluster_type_size;
-			uint32_t max_cluster_element_count_div_32;
+		enum UBOFlags {
+			IMPLEMENTATION_DATA_FLAGS_IN_OPAQUE_PASS = (1 << 0),
+			IMPLEMENTATION_DATA_FLAGS_USE_ROUGHNESS_LIMITER = (1 << 1)
+		};
 
+		// This struct is loaded into Set 1 - Binding 1, populated at start of rendering a frame and various passes, must match with shader code
+		struct UBO {
 			uint32_t ss_effects_flags;
 			float ssao_light_affect;
 			float ssao_ao_affect;
-			uint32_t pad1;
+			uint32_t flags;
 
-			float sdf_to_bounds[16];
+			std140_mat4 sdf_to_bounds;
 
-			int32_t sdf_offset[3];
-			uint32_t pad2;
+			std140_ivec3 sdf_offset;
 
-			int32_t sdf_size[3];
-			uint32_t gi_upscale_for_msaa;
+			union {
+				std140_ivec3 sdf_size;
+				std140_ivec3_trail gi_upscale_for_msaa;
+			};
 
-			uint32_t volumetric_fog_enabled;
-			float volumetric_fog_inv_length;
-			float volumetric_fog_detail_spread;
-			uint32_t volumetric_fog_pad;
+			uint32_t cluster_shift;
+			// uint32_t cluster_width;
+			// uint32_t cluster_type_size;
+			uint32_t max_cluster_element_count_div_32;
+
+			/* Moved to SceneData */
+
+			// uint32_t volumetric_fog_enabled;
+			// float volumetric_fog_inv_length;
+			// float volumetric_fog_detail_spread;
+
+			/* Moved from SceneData */
+
+			std140_vec2 shadow_atlas_pixel_size;
+			std140_vec2 directional_shadow_pixel_size;
+			std140_vec2 reflection_atlas_border_size;
+
+			float roughness_limiter_amount;
+			float roughness_limiter_limit;
+			float opaque_prepass_threshold;
+
+			float pass_alpha_multiplier;
+
+			uint32_t camera_count;
+			uint32_t _pad4[3];
+
+			float directional_penumbra_shadow_kernel[128];
+			float directional_soft_shadow_kernel[128];
+			float penumbra_shadow_kernel[128];
+			float soft_shadow_kernel[128];
 		};
 
 		struct PushConstantUbershader {
@@ -389,7 +433,7 @@ private:
 
 		UBO ubo;
 
-		LocalVector<RID> uniform_buffers;
+		DynamicUniformBuffer<> scene_uniform_buffer;
 		LocalVector<RID> implementation_uniform_buffers;
 
 		LightmapData lightmaps[MAX_LIGHTMAPS];
@@ -415,6 +459,7 @@ private:
 		bool used_sss = false;
 		bool used_lightmap = false;
 		bool used_opaque_stencil = false;
+		bool used_portals = false;
 
 		struct ShadowPass {
 			uint32_t element_from;
@@ -438,7 +483,8 @@ private:
 
 	static RenderForwardClustered *singleton;
 
-	void _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, bool p_pancake_shadows = false, int p_index = 0);
+	void _setup_scene_data(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_shadow_pass = false);
+	void _setup_scene_implementation(const RenderDataRD *p_render_data, const Size2i &p_screen_size, float p_opaque_prepass_threshold = 0.0f, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, int p_index = 0);
 	void _setup_voxelgis(const PagedArray<RID> &p_voxelgis);
 	void _setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform);
 
@@ -451,6 +497,9 @@ private:
 				uint32_t uses_projector : 1;
 				uint32_t uses_forward_gi : 1;
 				uint32_t uses_lightmap : 1;
+
+				uint32_t _padding_ : 4;
+				uint32_t portal_index : 8;
 			};
 			uint32_t value;
 		};
@@ -479,29 +528,42 @@ private:
 
 	// Cached data for drawing surfaces
 	struct GeometryInstanceSurfaceDataCache {
+		// There were gaps in this enum, we're not really sure why,
+		// but we converted all the values to bit-shifts so it's easier to read...
+		// But just in case there was a reason for the gaps, we preserved the values here
 		enum {
-			FLAG_PASS_DEPTH = 1,
-			FLAG_PASS_OPAQUE = 2,
-			FLAG_PASS_ALPHA = 4,
-			FLAG_PASS_SHADOW = 8,
-			FLAG_USES_SHARED_SHADOW_MATERIAL = 128,
-			FLAG_USES_SUBSURFACE_SCATTERING = 2048,
-			FLAG_USES_SCREEN_TEXTURE = 4096,
-			FLAG_USES_DEPTH_TEXTURE = 8192,
-			FLAG_USES_NORMAL_TEXTURE = 16384,
-			FLAG_USES_DOUBLE_SIDED_SHADOWS = 32768,
-			FLAG_USES_PARTICLE_TRAILS = 65536,
-			FLAG_USES_MOTION_VECTOR = 131072,
-			FLAG_USES_STENCIL = 262144,
+			FLAG_PASS_DEPTH = (1 << 0),
+			FLAG_PASS_OPAQUE = (1 << 1),
+			FLAG_PASS_ALPHA = (1 << 2),
+			FLAG_PASS_SHADOW = (1 << 3),
+
+			FLAG_USES_SHARED_SHADOW_MATERIAL = (1 << 7),
+
+			FLAG_USES_SUBSURFACE_SCATTERING = (1 << 11),
+			FLAG_USES_SCREEN_TEXTURE = (1 << 12),
+			FLAG_USES_DEPTH_TEXTURE = (1 << 13),
+			FLAG_USES_NORMAL_TEXTURE = (1 << 14),
+			FLAG_USES_DOUBLE_SIDED_SHADOWS = (1 << 15),
+			FLAG_USES_PARTICLE_TRAILS = (1 << 16),
+			FLAG_USES_MOTION_VECTOR = (1 << 17),
+			FLAG_USES_STENCIL = (1 << 18)
 		};
 
-		union {
+		RS::PrimitiveType primitive = RS::PRIMITIVE_MAX;
+		uint32_t flags = 0;
+		uint32_t surface_index = 0;
+//		uint32_t color_pass_inclusion_mask = 0; // Moved to GeometryInstanceSurfaceRenderElement
+
+		// The actual sort is done in GeometryInstanceSurfaceRenderElement,
+		// but we set some static data in the sort key that we want copied
+		union SortKey {
 			struct {
 				uint64_t sort_key1;
 				uint64_t sort_key2;
 			};
 			struct {
 				// Needs to be grouped together to be used in RenderElementInfo, as the value is masked directly.
+				// (Note - `portal_index` is included by the mask as well)
 				uint64_t lod_index : 8;
 				uint64_t uses_softshadow : 1;
 				uint64_t uses_projector : 1;
@@ -512,20 +574,16 @@ private:
 				// and geometry. This current order was found to be the most optimal in large projects. If you wish to measure
 				// differences, refer to RenderingDeviceGraph and the methods available to print statistics for draw lists.
 				uint64_t depth_layer : 4;
+				uint64_t portal_index : 8;
 				uint64_t surface_index : 8;
 				uint64_t geometry_id : 32;
-				uint64_t material_id_hi : 8;
 
-				uint64_t material_id_lo : 24;
+				// Cleaved 8 bits from material_id because we needed it for `portal_index` and you can't actually have that many materials, lol
+				uint64_t material_id : 24;	
 				uint64_t shader_id : 32;
 				uint64_t priority : 8;
 			};
-		} sort;
-
-		RS::PrimitiveType primitive = RS::PRIMITIVE_MAX;
-		uint32_t flags = 0;
-		uint32_t surface_index = 0;
-		uint32_t color_pass_inclusion_mask = 0;
+		} sort_base;
 
 		void *surface = nullptr;
 		RID material_uniform_set;
@@ -545,21 +603,33 @@ private:
 				compilation_dirty_element(this), compilation_all_element(this) {}
 	};
 
+	// Used in RenderList.
+	// Originally a pointer straight to the surface was stored, but we
+	// made this struct for the sake of portal rendering.
+	// Sort and flags have been moved here too. - Incandescence
+	struct GeometryInstanceSurfaceRenderElement {
+		GeometryInstanceSurfaceDataCache *surf;
+		uint32_t flags;
+		uint32_t color_pass_inclusion_mask;
+		float depth;
+		GeometryInstanceSurfaceDataCache::SortKey sort;
+	};
+
 	class GeometryInstanceForwardClustered : public RenderGeometryInstanceBase {
 	public:
 		// lightmap
 		RID lightmap_instance;
 		Rect2 lightmap_uv_scale;
-		uint32_t lightmap_slice_index;
 		GeometryInstanceLightmapSH *lightmap_sh = nullptr;
+		uint32_t lightmap_slice_index;
 
 		//used during rendering
 
 		uint32_t gi_offset_cache = 0;
-		bool store_transform_cache = true;
 		RID transforms_uniform_set;
 		uint32_t instance_count = 0;
 		uint32_t trail_steps = 1;
+		bool store_transform_cache = true;
 		bool can_sdfgi = false;
 		bool using_projectors = false;
 		bool using_softshadows = false;
@@ -667,7 +737,7 @@ private:
 	/* Render List */
 
 	struct RenderList {
-		LocalVector<GeometryInstanceSurfaceDataCache *> elements;
+		LocalVector<GeometryInstanceSurfaceRenderElement> elements;
 		LocalVector<RenderElementInfo> element_info;
 
 		void clear() {
@@ -678,46 +748,51 @@ private:
 		//should eventually be replaced by radix
 
 		struct SortByKey {
-			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceDataCache *A, const GeometryInstanceSurfaceDataCache *B) const {
-				return (A->sort.sort_key2 == B->sort.sort_key2) ? (A->sort.sort_key1 < B->sort.sort_key1) : (A->sort.sort_key2 < B->sort.sort_key2);
+			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceRenderElement &A, const GeometryInstanceSurfaceRenderElement &B) const {
+				return (A.sort.sort_key2 == B.sort.sort_key2) ? (A.sort.sort_key1 < B.sort.sort_key1) : (A.sort.sort_key2 < B.sort.sort_key2);
 			}
 		};
 
 		void sort_by_key() {
-			SortArray<GeometryInstanceSurfaceDataCache *, SortByKey> sorter;
+			SortArray<GeometryInstanceSurfaceRenderElement, SortByKey> sorter;
 			sorter.sort(elements.ptr(), elements.size());
 		}
 
 		void sort_by_key_range(uint32_t p_from, uint32_t p_size) {
-			SortArray<GeometryInstanceSurfaceDataCache *, SortByKey> sorter;
+			SortArray<GeometryInstanceSurfaceRenderElement, SortByKey> sorter;
 			sorter.sort(elements.ptr() + p_from, p_size);
 		}
 
 		struct SortByDepth {
-			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceDataCache *A, const GeometryInstanceSurfaceDataCache *B) const {
-				return (A->owner->depth < B->owner->depth);
+			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceRenderElement &A, const GeometryInstanceSurfaceRenderElement &B) const {
+				return (A.depth < B.depth);
 			}
 		};
 
 		void sort_by_depth() { //used for shadows
-
-			SortArray<GeometryInstanceSurfaceDataCache *, SortByDepth> sorter;
+			SortArray<GeometryInstanceSurfaceRenderElement, SortByDepth> sorter;
 			sorter.sort(elements.ptr(), elements.size());
 		}
 
 		struct SortByReverseDepthAndPriority {
-			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceDataCache *A, const GeometryInstanceSurfaceDataCache *B) const {
-				return (A->sort.priority == B->sort.priority) ? (A->owner->depth > B->owner->depth) : (A->sort.priority < B->sort.priority);
+			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceRenderElement &A, const GeometryInstanceSurfaceRenderElement &B) const {
+				// Portal index has priority so we can draw transparent objects correctly, as the depth / stencil buffer needs to be corrected
+				// before rendering any transparent objects within a view with a child portal.
+				// Specifically we end up "reversing" the operation done in the depth pre-pass step, replacing the child portal's stencil
+				// with the parent view's stencil, along with its depth within said view.
+				return (A.sort.portal_index == B.sort.portal_index) ?
+					(A.sort.priority == B.sort.priority) ?
+						(A.depth > B.depth) : (A.sort.priority < B.sort.priority)
+				: (A.sort.portal_index > B.sort.portal_index);
 			}
 		};
 
 		void sort_by_reverse_depth_and_priority() { //used for alpha
-
-			SortArray<GeometryInstanceSurfaceDataCache *, SortByReverseDepthAndPriority> sorter;
+			SortArray<GeometryInstanceSurfaceRenderElement, SortByReverseDepthAndPriority> sorter;
 			sorter.sort(elements.ptr(), elements.size());
 		}
 
-		_FORCE_INLINE_ void add_element(GeometryInstanceSurfaceDataCache *p_element) {
+		_FORCE_INLINE_ void add_element(GeometryInstanceSurfaceRenderElement &p_element) {
 			elements.push_back(p_element);
 		}
 	};
@@ -752,10 +827,10 @@ private:
 
 	/* Render shadows */
 
-	void _render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier = 0, float p_screen_mesh_lod_threshold = 0.0, bool p_open_pass = true, bool p_close_pass = true, bool p_clear_region = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1), const Transform3D &p_main_cam_transform = Transform3D());
-	void _render_shadow_begin();
-	void _render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, const Rect2i &p_rect = Rect2i(), bool p_flip_y = false, bool p_clear_region = true, bool p_begin = true, bool p_end = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1), const Transform3D &p_main_cam_transform = Transform3D());
-	void _render_shadow_process();
+	void _render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, RenderSceneDataRD &p_scene_data, const PagedArray<RenderGeometryInstance *> &p_instances, bool p_open_pass = true, bool p_close_pass = true, bool p_clear_region = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1));
+	void _render_shadow_begin(RenderSceneDataRD &p_scene_data);
+	void _render_shadow_append(RID p_framebuffer, RenderSceneDataRD &p_scene_data, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, const Rect2i &p_rect = Rect2i(), bool p_flip_y = false, bool p_clear_region = true, bool p_begin = true, bool p_end = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1));
+	void _render_shadow_process(RenderSceneDataRD &p_scene_data);
 	void _render_shadow_end();
 
 	/* Render Scene */
@@ -800,9 +875,9 @@ public:
 	RendererRD::SSEffects *get_ss_effects() { return ss_effects; }
 
 	/* callback from updating our lighting UBOs, used to populate cluster builder */
-	virtual void setup_added_reflection_probe(const Transform3D &p_transform, const Vector3 &p_half_size) override;
-	virtual void setup_added_light(const RS::LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture) override;
-	virtual void setup_added_decal(const Transform3D &p_transform, const Vector3 &p_half_size) override;
+	virtual void setup_added_reflection_probe(const Transform3D &p_transform, const Vector3 &p_half_size, int p_index, int p_portal_index = 0) override;
+	virtual void setup_added_light(const RS::LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, int p_index, int p_portal_index = 0) override;
+	virtual void setup_added_decal(const Transform3D &p_transform, const Vector3 &p_half_size, int p_index, int p_portal_index = 0) override;
 
 	virtual void base_uniforms_changed() override;
 

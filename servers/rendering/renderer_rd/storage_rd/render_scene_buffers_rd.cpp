@@ -721,6 +721,8 @@ RID RenderSceneBuffersRD::get_framebuffer() {
 	return framebuffer;
 }
 
+////
+
 uint32_t RenderSceneBuffersRD::get_color_usage_bits(bool p_resolve, bool p_msaa, bool p_storage) {
 	DEV_ASSERT((!p_resolve && !p_msaa) || (p_resolve != p_msaa));
 

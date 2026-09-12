@@ -80,6 +80,7 @@ void Performance::_bind_methods() {
 	BIND_ENUM_CONSTANT(RENDER_TOTAL_OBJECTS_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDER_TOTAL_PRIMITIVES_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDER_TOTAL_DRAW_CALLS_IN_FRAME);
+	BIND_ENUM_CONSTANT(RENDER_TOTAL_PORTALS_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDER_VIDEO_MEM_USED);
 	BIND_ENUM_CONSTANT(RENDER_TEXTURE_MEM_USED);
 	BIND_ENUM_CONSTANT(RENDER_BUFFER_MEM_USED);
@@ -176,6 +177,7 @@ String Performance::get_monitor_name(Monitor p_monitor) const {
 		PNAME("object/orphan_nodes"),
 		PNAME("raster/total_objects_drawn"),
 		PNAME("raster/total_primitives_drawn"),
+		PNAME("raster/total_portals_drawn"),
 		PNAME("raster/total_draw_calls"),
 		PNAME("video/video_mem"),
 		PNAME("video/texture_mem"),
@@ -264,6 +266,8 @@ double Performance::get_monitor(Monitor p_monitor) const {
 			return RS::get_singleton()->get_rendering_info(RS::RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME);
 		case RENDER_TOTAL_PRIMITIVES_IN_FRAME:
 			return RS::get_singleton()->get_rendering_info(RS::RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME);
+		case RENDER_TOTAL_PORTALS_IN_FRAME:
+			return RS::get_singleton()->get_rendering_info(RS::RENDERING_INFO_TOTAL_PORTALS_IN_FRAME);
 		case RENDER_TOTAL_DRAW_CALLS_IN_FRAME:
 			return RS::get_singleton()->get_rendering_info(RS::RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME);
 		case RENDER_VIDEO_MEM_USED:
@@ -463,17 +467,26 @@ double Performance::get_monitor(Monitor p_monitor) const {
 Performance::MonitorType Performance::get_monitor_type(Monitor p_monitor) const {
 	ERR_FAIL_INDEX_V(p_monitor, MONITOR_MAX, MONITOR_TYPE_QUANTITY);
 	// ugly
+	// you're right, what the fuck is this?
 	static const MonitorType types[MONITOR_MAX] = {
+		// TIME
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_TIME,
 		MONITOR_TYPE_TIME,
 		MONITOR_TYPE_TIME,
+
+		// MEMORY
 		MONITOR_TYPE_MEMORY,
 		MONITOR_TYPE_MEMORY,
 		MONITOR_TYPE_MEMORY,
+
+		// OBJECT
+		MONITOR_TYPE_QUANTITY,		
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
+
+		// RENDER
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
@@ -481,13 +494,21 @@ Performance::MonitorType Performance::get_monitor_type(Monitor p_monitor) const 
 		MONITOR_TYPE_MEMORY,
 		MONITOR_TYPE_MEMORY,
 		MONITOR_TYPE_MEMORY,
+
+		// PHYSICS_2D
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
+
+		// PHYSICS_3D
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
+		
+		// AUDIO
 		MONITOR_TYPE_TIME,
+
+		// NAVIGATION
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
@@ -498,6 +519,15 @@ Performance::MonitorType Performance::get_monitor_type(Monitor p_monitor) const 
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
+
+		// PIPELINE
+		MONITOR_TYPE_QUANTITY,
+		MONITOR_TYPE_QUANTITY,
+		MONITOR_TYPE_QUANTITY,
+		MONITOR_TYPE_QUANTITY,
+		MONITOR_TYPE_QUANTITY,
+
+		// NAVIGATION_2D
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
@@ -508,12 +538,9 @@ Performance::MonitorType Performance::get_monitor_type(Monitor p_monitor) const 
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
-		MONITOR_TYPE_QUANTITY,
-		MONITOR_TYPE_QUANTITY,
-		MONITOR_TYPE_QUANTITY,
-		MONITOR_TYPE_QUANTITY,
-		MONITOR_TYPE_QUANTITY,
+
 #ifndef _3D_DISABLED
+		// NAVIGATION_3D
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,
 		MONITOR_TYPE_QUANTITY,

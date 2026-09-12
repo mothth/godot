@@ -77,7 +77,12 @@ public:
 			TYPE_SET_PUSH_CONSTANT,
 			TYPE_SET_SCISSOR,
 			TYPE_SET_VIEWPORT,
-			TYPE_UNIFORM_SET_PREPARE_FOR_USE
+			TYPE_SET_STENCIL_MASKS,
+#ifdef EXTENDED_DYNAMIC_STATE
+			TYPE_SET_STENCIL_ENABLED,
+			TYPE_SET_STENCIL_OPERATORS,
+#endif // EXTENDED_DYNAMIC_STATE
+			TYPE_UNIFORM_SET_PREPARE_FOR_USE,
 		};
 
 		Type type = TYPE_NONE;
@@ -497,7 +502,7 @@ private:
 		RDD::ShaderID shader;
 		uint32_t first_set_index = 0;
 		uint32_t set_count = 0;
-		uint32_t dynamic_offsets_mask = 0u;
+		uint32_t dynamic_offset_count = 0;
 
 		_FORCE_INLINE_ RDD::UniformSetID *uniform_set_ids() {
 			return reinterpret_cast<RDD::UniformSetID *>(&this[1]);
@@ -506,11 +511,19 @@ private:
 		_FORCE_INLINE_ const RDD::UniformSetID *uniform_set_ids() const {
 			return reinterpret_cast<const RDD::UniformSetID *>(&this[1]);
 		}
+		
+		_FORCE_INLINE_ uint32_t *dynamic_offsets() {
+			return reinterpret_cast<uint32_t *>(uniform_set_ids() + set_count);
+		}
+
+		_FORCE_INLINE_ const uint32_t *dynamic_offsets() const {
+			return reinterpret_cast<const uint32_t *>(uniform_set_ids() + set_count);
+		}
 	};
 
 	struct DrawListBindVertexBuffersInstruction : DrawListInstruction {
 		uint32_t vertex_buffers_count = 0;
-		uint64_t dynamic_offsets_mask = 0;
+		uint32_t dynamic_offset_count = 0;
 
 		_FORCE_INLINE_ RDD::BufferID *vertex_buffers() {
 			return reinterpret_cast<RDD::BufferID *>(&this[1]);
@@ -526,6 +539,14 @@ private:
 
 		_FORCE_INLINE_ const uint64_t *vertex_buffer_offsets() const {
 			return reinterpret_cast<const uint64_t *>(&vertex_buffers()[vertex_buffers_count]);
+		}
+
+		_FORCE_INLINE_ uint32_t *dynamic_offsets() {
+			return reinterpret_cast<uint32_t *>(vertex_buffer_offsets() + vertex_buffers_count);
+		}
+
+		_FORCE_INLINE_ const uint32_t *dynamic_offsets() const {
+			return reinterpret_cast<const uint32_t *>(vertex_buffer_offsets() + vertex_buffers_count);
 		}
 	};
 
@@ -616,6 +637,29 @@ private:
 		Rect2i rect;
 	};
 
+	struct DrawListSetStencilMasksInstruction : DrawListInstruction {
+		RenderingDeviceCommons::StencilFace face_mask;
+		int reference;		// -1 if unchanged
+		int compare_mask;	// -1 if unchanged
+		int write_mask;		// -1 if unchanged
+	};
+
+#ifdef EXTENDED_DYNAMIC_STATE
+
+	struct DrawListSetStencilEnabledInstruction : DrawListInstruction {
+		bool enabled;
+	};
+
+	struct DrawListSetStencilOperatorsInstruction : DrawListInstruction {
+		RenderingDeviceCommons::StencilFace face_mask;
+		RenderingDeviceCommons::StencilOperation fail;
+		RenderingDeviceCommons::StencilOperation pass;
+		RenderingDeviceCommons::StencilOperation depth_fail;
+		RenderingDeviceCommons::CompareOperator compare;
+	};
+
+#endif // EXTENDED_DYNAMIC_STATE
+
 	struct DrawListUniformSetPrepareForUseInstruction : DrawListInstruction {
 		RDD::UniformSetID uniform_set;
 		RDD::ShaderID shader;
@@ -630,7 +674,7 @@ private:
 		RDD::ShaderID shader;
 		uint32_t first_set_index = 0;
 		uint32_t set_count = 0;
-		uint32_t dynamic_offsets_mask = 0u;
+		uint32_t dynamic_offset_count = 0;
 
 		_FORCE_INLINE_ RDD::UniformSetID *uniform_set_ids() {
 			return reinterpret_cast<RDD::UniformSetID *>(&this[1]);
@@ -638,6 +682,14 @@ private:
 
 		_FORCE_INLINE_ const RDD::UniformSetID *uniform_set_ids() const {
 			return reinterpret_cast<const RDD::UniformSetID *>(&this[1]);
+		}
+
+		_FORCE_INLINE_ uint32_t *dynamic_offsets() {
+			return reinterpret_cast<uint32_t *>(uniform_set_ids() + set_count);
+		}
+
+		_FORCE_INLINE_ const uint32_t *dynamic_offsets() const {
+			return reinterpret_cast<const uint32_t *>(uniform_set_ids() + set_count);
 		}
 	};
 
@@ -802,8 +854,8 @@ public:
 	void add_draw_list_begin(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb = 0, bool p_split_cmd_buffer = false);
 	void add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset);
 	void add_draw_list_bind_pipeline(RDD::PipelineID p_pipeline, BitField<RDD::PipelineStageBits> p_pipeline_stage_bits);
-	void add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
-	void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_set, uint32_t p_first_index, uint32_t p_set_count);
+	void add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t p_set_index, VectorView<int> p_dynamic_frames = VectorView<int>());
+	void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_set, uint32_t p_first_index, uint32_t p_set_count, VectorView<int> p_dynamic_frames = VectorView<int>());
 	void add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets);
 	void add_draw_list_clear_attachments(VectorView<RDD::AttachmentClear> p_attachments_clear, VectorView<Rect2i> p_attachments_clear_rect);
 	void add_draw_list_draw(uint32_t p_vertex_count, uint32_t p_instance_count);
@@ -817,6 +869,11 @@ public:
 	void add_draw_list_set_push_constant(RDD::ShaderID p_shader, const void *p_data, uint32_t p_data_size);
 	void add_draw_list_set_scissor(Rect2i p_rect);
 	void add_draw_list_set_viewport(Rect2i p_rect);
+	void add_draw_list_set_stencil_masks(RDD::StencilFace p_face_mask, uint32_t p_reference, uint32_t p_compare_mask = RDD::STENCIL_MASK_DEFAULT, uint32_t p_write_mask = RDD::STENCIL_MASK_DEFAULT);
+#ifdef EXTENDED_DYNAMIC_STATE
+	void add_draw_list_set_stencil_enabled(bool p_enabled);
+	void add_draw_list_set_stencil_operators(RDD::StencilFace p_face_mask, RDD::StencilOperation p_fail, RDD::StencilOperation p_pass, RDD::StencilOperation p_depth_fail, RDD::CompareOperator p_compare);
+#endif // EXTENDED_DYNAMIC_STATE
 	void add_draw_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
 	void add_draw_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage);
 	void add_draw_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);

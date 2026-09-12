@@ -101,8 +101,6 @@ public:
 	virtual bool can_interact_with(const JoltSoftBody3D &p_other) const override;
 	virtual bool can_interact_with(const JoltArea3D &p_other) const override;
 
-	virtual bool reports_contacts() const override { return false; }
-
 	virtual Vector3 get_velocity_at_position(const Vector3 &p_position) const override;
 
 	void set_mesh(const RID &p_mesh);

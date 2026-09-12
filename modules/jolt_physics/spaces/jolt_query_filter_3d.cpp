@@ -57,6 +57,9 @@ bool JoltQueryFilter3D::ShouldCollide(JPH::BroadPhaseLayer p_broad_phase_layer) 
 		case (JPH::BroadPhaseLayer::Type)JoltBroadPhaseLayer::AREA_UNDETECTABLE: {
 			return collide_with_areas;
 		} break;
+		case (JPH::BroadPhaseLayer::Type)JoltBroadPhaseLayer::PORTAL: {
+			return collide_with_portals;
+		} break;
 		default: {
 			ERR_FAIL_V_MSG(false, vformat("Unhandled broad phase layer: '%d'. This should not happen. Please report this.", broad_phase_layer));
 		}

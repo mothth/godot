@@ -62,6 +62,7 @@ public:
 		allow_collision(BODY_DYNAMIC, BODY_DYNAMIC);
 		allow_collision(BODY_DYNAMIC, AREA_DETECTABLE);
 		allow_collision(BODY_DYNAMIC, AREA_UNDETECTABLE);
+		allow_collision(BODY_DYNAMIC, PORTAL);
 		allow_collision(AREA_DETECTABLE, BODY_DYNAMIC);
 		allow_collision(AREA_DETECTABLE, BODY_STATIC);
 		allow_collision(AREA_DETECTABLE, BODY_STATIC_BIG);
@@ -137,6 +138,9 @@ const char *JoltLayers::GetBroadPhaseLayerName(JPH::BroadPhaseLayer p_layer) con
 		}
 		case (JPH::BroadPhaseLayer::Type)JoltBroadPhaseLayer::AREA_UNDETECTABLE: {
 			return "AREA_UNDETECTABLE";
+		}
+		case (JPH::BroadPhaseLayer::Type)JoltBroadPhaseLayer::PORTAL: {
+			return "PORTAL";
 		}
 		default: {
 			return "UNKNOWN";

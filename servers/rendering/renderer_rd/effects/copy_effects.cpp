@@ -783,6 +783,7 @@ void CopyEffects::gaussian_blur_raster(RID p_source_rd_texture, RID p_dest_textu
 	ERR_FAIL_NULL(material_storage);
 
 	RID dest_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(p_dest_texture);
+	ERR_FAIL_COND(dest_framebuffer.is_null());
 
 	memset(&blur_raster.push_constant, 0, sizeof(BlurRasterPushConstant));
 
@@ -869,6 +870,7 @@ void CopyEffects::gaussian_glow_downsample_raster(RID p_source_rd_texture, RID p
 	ERR_FAIL_NULL(material_storage);
 
 	RID dest_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(p_dest_texture);
+	ERR_FAIL_COND(dest_framebuffer.is_null());
 
 	memset(&blur_raster.push_constant, 0, sizeof(BlurRasterPushConstant));
 
@@ -912,6 +914,7 @@ void CopyEffects::gaussian_glow_upsample_raster(RID p_source_rd_texture, RID p_d
 	ERR_FAIL_NULL(material_storage);
 
 	RID dest_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(p_dest_texture);
+	ERR_FAIL_COND(dest_framebuffer.is_null());
 
 	memset(&blur_raster.push_constant, 0, sizeof(BlurRasterPushConstant));
 
@@ -985,6 +988,7 @@ void CopyEffects::make_mipmap_raster(RID p_source_rd_texture, RID p_dest_texture
 	ERR_FAIL_COND_MSG(!raster_effects.has_flag(RASTER_EFFECT_COPY), "Can't use the raster version of mipmap.");
 
 	RID dest_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(p_dest_texture);
+	ERR_FAIL_COND(dest_framebuffer.is_null());
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
@@ -1065,6 +1069,7 @@ void CopyEffects::set_color_raster(RID p_dest_texture, const Color &p_color, con
 	copy_to_fb.push_constant.set_color[3] = p_color.a;
 
 	RID dest_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(p_dest_texture);
+	ERR_FAIL_COND(dest_framebuffer.is_null());
 
 	CopyToFBMode mode = COPY_TO_FB_SET_COLOR;
 

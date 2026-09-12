@@ -3007,6 +3007,7 @@ void RenderingServer::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME);
 	BIND_ENUM_CONSTANT(VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME);
+	BIND_ENUM_CONSTANT(VIEWPORT_RENDER_INFO_PORTALS_IN_FRAME);
 	BIND_ENUM_CONSTANT(VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME);
 	BIND_ENUM_CONSTANT(VIEWPORT_RENDER_INFO_MAX);
 
@@ -3496,6 +3497,26 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(CANVAS_OCCLUDER_POLYGON_CULL_CLOCKWISE);
 	BIND_ENUM_CONSTANT(CANVAS_OCCLUDER_POLYGON_CULL_COUNTER_CLOCKWISE);
 
+	/* PORTALS */
+
+	ClassDB::bind_method(D_METHOD("portal_create"), &RenderingServer::portal_create);
+	ClassDB::bind_method(D_METHOD("portal_set_double_sided", "portal", "double_sided"), &RenderingServer::portal_set_double_sided);
+	ClassDB::bind_method(D_METHOD("portal_set_teleport_light", "portal", "teleport_light"), &RenderingServer::portal_set_teleport_light);
+	ClassDB::bind_method(D_METHOD("portal_set_teleport_gi", "portal", "teleport_gi"), &RenderingServer::portal_set_teleport_gi);
+	ClassDB::bind_method(D_METHOD("portal_set_mesh", "portal", "mesh"), &RenderingServer::portal_set_mesh);
+	ClassDB::bind_method(D_METHOD("portal_set_destination_transform", "portal", "transform"), &RenderingServer::portal_set_destination_transform);
+	ClassDB::bind_method(D_METHOD("portal_set_scenario_override", "portal", "scenario"), &RenderingServer::portal_set_scenario_override);
+	ClassDB::bind_method(D_METHOD("portal_set_environment_override", "portal", "environment"), &RenderingServer::portal_set_environment_override);
+	ClassDB::bind_method(D_METHOD("portal_set_recursive_depth", "portal", "depth"), &RenderingServer::portal_set_recursive_depth);
+	ClassDB::bind_method(D_METHOD("portal_set_cull_mask", "portal", "operator", "mask"), &RenderingServer::portal_set_cull_mask);
+	ClassDB::bind_method(D_METHOD("portal_set_cull_partner", "portal", "partner"), &RenderingServer::portal_set_cull_partner);
+
+	BIND_ENUM_CONSTANT(PORTAL_CULL_MASK_OP_KEEP);
+	BIND_ENUM_CONSTANT(PORTAL_CULL_MASK_OP_REPLACE);
+	BIND_ENUM_CONSTANT(PORTAL_CULL_MASK_OP_AND);
+	BIND_ENUM_CONSTANT(PORTAL_CULL_MASK_OP_OR);
+	BIND_ENUM_CONSTANT(PORTAL_CULL_MASK_OP_XOR);
+
 	/* GLOBAL SHADER UNIFORMS */
 
 	ClassDB::bind_method(D_METHOD("global_shader_parameter_add", "name", "type", "default_value"), &RenderingServer::global_shader_parameter_add);
@@ -3578,6 +3599,7 @@ void RenderingServer::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME);
+	BIND_ENUM_CONSTANT(RENDERING_INFO_TOTAL_PORTALS_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDERING_INFO_TEXTURE_MEM_USED);
 	BIND_ENUM_CONSTANT(RENDERING_INFO_BUFFER_MEM_USED);
@@ -3843,6 +3865,10 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_elements", PROPERTY_HINT_RANGE, "1024,65536,1"), 65536);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_renderable_lights", PROPERTY_HINT_RANGE, "2,256,1"), 32);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/limits/opengl/max_lights_per_object", PROPERTY_HINT_RANGE, "2,1024,1"), 8);
+
+	// Portals
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/portals/max_portal_count", PROPERTY_HINT_RANGE, "1,255"), 64);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/portals/max_recursive_depth", PROPERTY_HINT_RANGE, "1,255"), 16);
 
 #ifndef XR_DISABLED
 	GLOBAL_DEF_RST_BASIC("xr/shaders/enabled", false);

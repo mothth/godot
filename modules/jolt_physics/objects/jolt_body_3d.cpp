@@ -38,6 +38,7 @@
 #include "../spaces/jolt_broad_phase_layer.h"
 #include "../spaces/jolt_space_3d.h"
 #include "jolt_area_3d.h"
+#include "jolt_portal_3d.h"
 #include "jolt_group_filter.h"
 #include "jolt_physics_direct_body_state_3d.h"
 #include "jolt_soft_body_3d.h"
@@ -1329,4 +1330,22 @@ bool JoltBody3D::can_interact_with(const JoltSoftBody3D &p_other) const {
 
 bool JoltBody3D::can_interact_with(const JoltArea3D &p_other) const {
 	return p_other.can_interact_with(*this);
+}
+
+bool JoltBody3D::can_interact_with(const JoltPortal3D &p_other) const {
+	return !is_static() && can_collide_with(p_other);
+}
+
+void JoltBody3D::teleport(const Transform3D &p_teleport_xform) {
+	Transform3D transform =	get_transform_scaled();
+	Vector3 linear_velocity = get_linear_velocity();
+	Vector3 angular_velocity = get_angular_velocity();
+
+	transform = p_teleport_xform * transform;
+	linear_velocity = p_teleport_xform.basis.xform(linear_velocity);
+	angular_velocity = p_teleport_xform.basis.orthonormalized().xform(angular_velocity);
+
+	set_transform(transform);
+	set_linear_velocity(linear_velocity);
+	set_angular_velocity(angular_velocity);
 }

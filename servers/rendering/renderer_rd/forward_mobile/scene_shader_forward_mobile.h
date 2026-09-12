@@ -30,6 +30,8 @@
 
 #pragma once
 
+#ifndef MOBILE_RENDERER_DISABLED
+
 #include "../storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/pipeline_hash_map_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl.gen.h"
@@ -386,3 +388,5 @@ public:
 };
 
 } // namespace RendererSceneRenderImplementation
+
+#endif

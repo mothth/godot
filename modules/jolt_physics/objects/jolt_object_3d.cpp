@@ -131,6 +131,8 @@ bool JoltObject3D::can_interact_with(const JoltObject3D &p_other) const {
 		return can_interact_with(*other_area);
 	} else if (const JoltSoftBody3D *other_soft_body = p_other.as_soft_body()) {
 		return can_interact_with(*other_soft_body);
+	} else if (const JoltPortal3D *other_portal = p_other.as_portal()) {
+		return can_interact_with(*other_portal);
 	} else {
 		ERR_FAIL_V_MSG(false, vformat("Unhandled object type: '%d'. This should not happen. Please report this.", p_other.get_type()));
 	}

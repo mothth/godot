@@ -599,7 +599,7 @@ public:
 		GEOMETRY_INSTANCE_3D = 1 << 11,
 		COLLISION_OBJECT_3D = 1 << 12,
 		PHYSICS_BODY_3D = 1 << 13,
-		MESH_INSTANCE_3D = 1 << 14,
+		MESH_INSTANCE_3D = 1 << 14
 	};
 
 	static constexpr AncestralClass static_ancestral_class = (AncestralClass)0;

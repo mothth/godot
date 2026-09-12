@@ -56,6 +56,8 @@ public:
 	const PagedArray<RID> *decals = nullptr;
 	const PagedArray<RID> *lightmaps = nullptr;
 	const PagedArray<RID> *fog_volumes = nullptr;
+//	const PagedArray<RID> *portals = nullptr;
+
 	RID environment;
 	RID camera_attributes;
 	RID compositor;
@@ -65,8 +67,8 @@ public:
 	RID reflection_probe;
 	int reflection_probe_pass = 0;
 
-	RID cluster_buffer;
 	uint32_t cluster_size = 0;
+	RID cluster_buffer;
 	uint32_t cluster_max_elements = 0;
 
 	uint32_t directional_light_count = 0;
@@ -74,15 +76,15 @@ public:
 
 	bool lightmap_bicubic_filter = false;
 
-	RenderingMethod::RenderInfo *render_info = nullptr;
-
 	/* Viewport data */
 	bool transparent_bg = false;
 	Rect2i render_region;
 
 	/* Shadow data */
-	const RendererSceneRender::RenderShadowData *render_shadows = nullptr;
 	int render_shadow_count = 0;
+	const RendererSceneRender::RenderShadowData *render_shadows = nullptr;
+
+	RenderingMethod::RenderInfo *render_info = nullptr;
 
 	LocalVector<int> cube_shadows;
 	LocalVector<int> shadows;
@@ -90,8 +92,36 @@ public:
 
 	/* GI info */
 	const RendererSceneRender::RenderSDFGIData *render_sdfgi_regions = nullptr;
-	int render_sdfgi_region_count = 0;
 	const RendererSceneRender::RenderSDFGIUpdateData *sdfgi_update_data = nullptr;
+	int render_sdfgi_region_count = 0;
 
 	uint32_t voxel_gi_count = 0;
+
+	/* Portal info */
+
+	struct PortalSceneInfo {
+		RID environment;
+		uint32_t directional_light_count = 0;
+		uint32_t directional_light_offset = 0;
+		bool directional_light_soft_shadows = false;
+		int stencil_index = -1;	// Stencil index to use when post-processing
+	};
+
+	Span<PortalRenderInfo> portal_info;
+
+	RID get_portal_environment(int p_index) const {
+		if (p_index == 0 || p_index < (int)portal_info.size()) {
+			return environment;
+		}
+		const PortalRenderInfo &info = portal_info[p_index - 1];
+		return info.environment;
+	}
+
+	const PortalRenderInfo &get_portal(int p_portal_index) const {
+		return portal_info[p_portal_index-1];
+	}
+
+	int portal_count() const {
+		return portal_info.size();
+	}
 };

@@ -30,6 +30,8 @@
 
 #pragma once
 
+#ifndef MOBILE_RENDERER_DISABLED
+
 #include "core/templates/paged_allocator.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
@@ -731,3 +733,5 @@ public:
 	~RenderForwardMobile();
 };
 } // namespace RendererSceneRenderImplementation
+
+#endif

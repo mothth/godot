@@ -205,6 +205,7 @@ public:
 
 	int total_objects_drawn = 0;
 	int total_vertices_drawn = 0;
+	int total_portals_drawn = 0;
 	int total_draw_calls_used = 0;
 
 	int num_viewports_with_motion_vectors = 0;
@@ -325,6 +326,7 @@ public:
 
 	int get_total_objects_drawn() const;
 	int get_total_primitives_drawn() const;
+	int get_total_portals_drawn() const;
 	int get_total_draw_calls_used() const;
 	int get_num_viewports_with_motion_vectors() const;
 

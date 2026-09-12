@@ -141,11 +141,35 @@ void SkyRD::SkyShaderData::set_code(const String &p_code) {
 	for (int i = 0; i < SKY_VERSION_MAX; i++) {
 		RD::PipelineDepthStencilState depth_stencil_state;
 		depth_stencil_state.enable_depth_test = true;
+		depth_stencil_state.enable_depth_write = false;
 		depth_stencil_state.depth_compare_operator = RD::COMPARE_OP_GREATER_OR_EQUAL;
+
+		// Temporary hack - we want this for portals, but ideally they should have their own pipelines.
+		// Unfortunately, our pipelines here are based on shader versions, but the portal pipeline variants have identical shader versions to their originals.
+		bool use_stencil = (i == SKY_VERSION_BACKGROUND || i == SKY_VERSION_BACKGROUND_MULTIVIEW);
+		if (use_stencil) {
+			depth_stencil_state.enable_stencil = true;
+			depth_stencil_state.front_op.pass = RD::STENCIL_OP_KEEP;
+			depth_stencil_state.front_op.fail = RD::STENCIL_OP_KEEP;
+			depth_stencil_state.front_op.depth_fail = RD::STENCIL_OP_KEEP;
+			depth_stencil_state.front_op.compare = RD::COMPARE_OP_EQUAL;
+			depth_stencil_state.front_op.compare_mask = 0xFF;
+			depth_stencil_state.front_op.write_mask = 0;
+			depth_stencil_state.front_op.reference = 0;
+			depth_stencil_state.back_op = depth_stencil_state.front_op;
+		}
 
 		if (scene_singleton->sky.sky_shader.shader.is_variant_enabled(i)) {
 			RID shader_variant = scene_singleton->sky.sky_shader.shader.version_get_shader(version, i);
-			pipelines[i].setup(shader_variant, RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), depth_stencil_state, RD::PipelineColorBlendState::create_disabled(), 0);
+			pipelines[i].setup(
+				shader_variant,
+				RD::RENDER_PRIMITIVE_TRIANGLES,
+				RD::PipelineRasterizationState(),
+				RD::PipelineMultisampleState(),
+				depth_stencil_state,
+				RD::PipelineColorBlendState::create_disabled(),
+				use_stencil ? RD::DYNAMIC_STATE_STENCIL_REFERENCE : 0
+			);
 		} else {
 			pipelines[i].clear();
 		}
@@ -215,7 +239,7 @@ static _FORCE_INLINE_ void store_transform_3x3(const Basis &p_basis, float *p_ar
 	p_array[11] = 0;
 }
 
-void SkyRD::_render_sky(RD::DrawListID p_list, float p_time, RID p_fb, PipelineCacheRD *p_pipeline, RID p_uniform_set, RID p_texture_set, const Projection &p_projection, const Basis &p_orientation, const Vector3 &p_position, float p_luminance_multiplier, float p_brightness_multiplier, float p_border_size) {
+void SkyRD::_render_sky(RD::DrawListID p_list, float p_time, RID p_fb, PipelineCacheRD *p_pipeline, RID p_uniform_set, RID p_texture_set, const Projection &p_projection, const Basis &p_orientation, const Vector3 &p_position, float p_luminance_multiplier, float p_brightness_multiplier, float p_border_size, int p_portal_index) {
 	SkyPushConstant sky_push_constant;
 
 	memset(&sky_push_constant, 0, sizeof(SkyPushConstant));
@@ -255,6 +279,10 @@ void SkyRD::_render_sky(RD::DrawListID p_list, float p_time, RID p_fb, PipelineC
 		} else {
 			RD::get_singleton()->draw_list_bind_uniform_set(draw_list, sky_scene_state.default_fog_uniform_set, SKY_SET_FOG);
 		}
+	}
+
+	if (p_portal_index >= 0) {
+		RD::get_singleton()->draw_list_set_stencil_masks(draw_list, RD::STENCIL_FACE_FRONT_AND_BACK, p_portal_index);
 	}
 
 	RD::get_singleton()->draw_list_set_push_constant(draw_list, &sky_push_constant, sizeof(SkyPushConstant));
@@ -991,6 +1019,10 @@ void SkyRD::setup_sky(const RenderDataRD *p_render_data, const Size2i p_screen_s
 
 	material->set_as_used();
 
+	// TODO: We have to set up the sky for each portal, just so you know...
+	// We can skip doing the environment set up if the portals share the same environment and scenario however.
+	const RenderSceneDataRD::CameraData &camera = p_render_data->scene_data->first_camera();
+
 	if (sky) {
 		// Save our screen size; our buffers will already have been cleared.
 		sky->screen_size.x = p_screen_size.x < 4 ? 4 : p_screen_size.x;
@@ -1018,13 +1050,14 @@ void SkyRD::setup_sky(const RenderDataRD *p_render_data, const Size2i p_screen_s
 			sky->reflection.dirty = true;
 		}
 
-		if (!p_render_data->scene_data->cam_transform.origin.is_equal_approx(sky->prev_position) && shader_data->uses_position) {
-			sky->prev_position = p_render_data->scene_data->cam_transform.origin;
+		// What to do with sky reflections in portals... or specifically sky reflections in world portals
+		if (!p_render_data->scene_data->main_cam_transform.origin.is_equal_approx(sky->prev_position) && shader_data->uses_position) {
+			sky->prev_position = p_render_data->scene_data->main_cam_transform.origin;
 			sky->reflection.dirty = true;
 		}
 	}
 
-	bool sun_scatter_enabled = RendererSceneRenderRD::get_singleton()->environment_get_fog_enabled(p_render_data->environment) && RendererSceneRenderRD::get_singleton()->environment_get_fog_sun_scatter(p_render_data->environment) > 0.001;
+	bool sun_scatter_enabled = RendererSceneRenderRD::get_singleton()->environment_get_fog_enabled(camera.environment) && RendererSceneRenderRD::get_singleton()->environment_get_fog_sun_scatter(camera.environment) > 0.001;
 	sky_scene_state.ubo.directional_light_count = 0;
 	if (shader_data->uses_light || sun_scatter_enabled) {
 		const PagedArray<RID> &lights = *p_render_data->lights;
@@ -1142,19 +1175,19 @@ void SkyRD::setup_sky(const RenderDataRD *p_render_data, const Size2i p_screen_s
 	}
 
 	sky_scene_state.view_count = p_render_data->scene_data->view_count;
-	sky_scene_state.cam_transform = p_render_data->scene_data->cam_transform;
+	sky_scene_state.cam_transform = camera.cam_transform;
 
 	Projection correction;
-	correction.set_depth_correction(p_render_data->scene_data->flip_y, true);
+	correction.set_depth_correction(camera.flip_y, true);
 	correction.add_jitter_offset(p_render_data->scene_data->taa_jitter);
 
-	Projection projection = p_render_data->scene_data->cam_projection;
-	if (p_render_data->scene_data->cam_frustum) {
+	Projection projection = camera.cam_projection;
+	if (camera.cam_frustum) {
 		// We don't use a full projection matrix for the sky, this is enough to make up for it.
 		projection[2].y = -projection[2].y;
 	}
 
-	float custom_fov = RendererSceneRenderRD::get_singleton()->environment_get_sky_custom_fov(p_render_data->environment);
+	float custom_fov = RendererSceneRenderRD::get_singleton()->environment_get_sky_custom_fov(camera.environment);
 
 	if (custom_fov && sky_scene_state.view_count == 1) {
 		// With custom fov we don't support stereo...
@@ -1169,7 +1202,7 @@ void SkyRD::setup_sky(const RenderDataRD *p_render_data, const Size2i p_screen_s
 
 	// Our info in our UBO is only used if we're rendering stereo.
 	for (uint32_t i = 0; i < p_render_data->scene_data->view_count; i++) {
-		Projection view_inv_projection = (correction * p_render_data->scene_data->view_projection[i]).inverse();
+		Projection view_inv_projection = (correction * p_render_data->scene_data->get_camera_view_projection(0, i)).inverse();
 		if (p_render_data->scene_data->view_count > 1) {
 			// Reprojection is used when we need to have things in combined space.
 			RendererRD::MaterialStorage::store_camera(sky_scene_state.cam_projection * view_inv_projection, sky_scene_state.ubo.combined_reprojection[i]);
@@ -1186,19 +1219,19 @@ void SkyRD::setup_sky(const RenderDataRD *p_render_data, const Size2i p_screen_s
 		sky_scene_state.ubo.view_eye_offsets[i][3] = 0.0;
 	}
 
-	sky_scene_state.ubo.z_far = p_render_data->scene_data->view_projection[0].get_z_far(); // Should be the same for all projection.
-	sky_scene_state.ubo.fog_enabled = RendererSceneRenderRD::get_singleton()->environment_get_fog_enabled(p_render_data->environment);
-	sky_scene_state.ubo.fog_density = RendererSceneRenderRD::get_singleton()->environment_get_fog_density(p_render_data->environment);
-	sky_scene_state.ubo.fog_aerial_perspective = RendererSceneRenderRD::get_singleton()->environment_get_fog_aerial_perspective(p_render_data->environment);
-	Color fog_color = RendererSceneRenderRD::get_singleton()->environment_get_fog_light_color(p_render_data->environment).srgb_to_linear();
-	float fog_energy = RendererSceneRenderRD::get_singleton()->environment_get_fog_light_energy(p_render_data->environment);
+	sky_scene_state.ubo.z_far = camera.z_far; // Should be the same for all cameras.
+	sky_scene_state.ubo.fog_enabled = RendererSceneRenderRD::get_singleton()->environment_get_fog_enabled(camera.environment);
+	sky_scene_state.ubo.fog_density = RendererSceneRenderRD::get_singleton()->environment_get_fog_density(camera.environment);
+	sky_scene_state.ubo.fog_aerial_perspective = RendererSceneRenderRD::get_singleton()->environment_get_fog_aerial_perspective(camera.environment);
+	Color fog_color = RendererSceneRenderRD::get_singleton()->environment_get_fog_light_color(camera.environment).srgb_to_linear();
+	float fog_energy = RendererSceneRenderRD::get_singleton()->environment_get_fog_light_energy(camera.environment);
 	sky_scene_state.ubo.fog_light_color[0] = fog_color.r * fog_energy;
 	sky_scene_state.ubo.fog_light_color[1] = fog_color.g * fog_energy;
 	sky_scene_state.ubo.fog_light_color[2] = fog_color.b * fog_energy;
-	sky_scene_state.ubo.fog_sun_scatter = RendererSceneRenderRD::get_singleton()->environment_get_fog_sun_scatter(p_render_data->environment);
+	sky_scene_state.ubo.fog_sun_scatter = RendererSceneRenderRD::get_singleton()->environment_get_fog_sun_scatter(camera.environment);
 
-	sky_scene_state.ubo.fog_sky_affect = RendererSceneRenderRD::get_singleton()->environment_get_fog_sky_affect(p_render_data->environment);
-	sky_scene_state.ubo.volumetric_fog_sky_affect = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_sky_affect(p_render_data->environment);
+	sky_scene_state.ubo.fog_sky_affect = RendererSceneRenderRD::get_singleton()->environment_get_fog_sky_affect(camera.environment);
+	sky_scene_state.ubo.volumetric_fog_sky_affect = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_sky_affect(camera.environment);
 
 	RD::get_singleton()->buffer_update(sky_scene_state.uniform_buffer, 0, sizeof(SkySceneState::UBO), &sky_scene_state.ubo);
 }
@@ -1448,7 +1481,7 @@ void SkyRD::update_res_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, RID p
 	RD::get_singleton()->draw_command_end_label(); // Setup Sky resolution buffers
 }
 
-void SkyRD::draw_sky(RD::DrawListID p_draw_list, Ref<RenderSceneBuffersRD> p_render_buffers, RID p_env, RID p_fb, double p_time, float p_luminance_multiplier, float p_brightness_multiplier) {
+void SkyRD::draw_sky(RD::DrawListID p_draw_list, Ref<RenderSceneBuffersRD> p_render_buffers, RenderSceneDataRD *p_scene_data, RID p_env, RID p_fb, double p_time, float p_luminance_multiplier, float p_brightness_multiplier) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	ERR_FAIL_COND(p_env.is_null());
@@ -1489,13 +1522,9 @@ void SkyRD::draw_sky(RD::DrawListID p_draw_list, Ref<RenderSceneBuffersRD> p_ren
 
 	material->set_as_used();
 
+	Projection projection = sky_scene_state.cam_projection;
 	Basis sky_transform = RendererSceneRenderRD::get_singleton()->environment_get_sky_orientation(p_env);
 	sky_transform.invert();
-
-	// Camera
-	Projection projection = sky_scene_state.cam_projection;
-
-	sky_transform = sky_transform * sky_scene_state.cam_transform.basis;
 
 	PipelineCacheRD *pipeline = &shader_data->pipelines[sky_scene_state.view_count > 1 ? SKY_VERSION_BACKGROUND_MULTIVIEW : SKY_VERSION_BACKGROUND];
 
@@ -1508,7 +1537,10 @@ void SkyRD::draw_sky(RD::DrawListID p_draw_list, Ref<RenderSceneBuffersRD> p_ren
 		texture_uniform_set = sky_scene_state.fog_only_texture_uniform_set;
 	}
 
-	_render_sky(p_draw_list, p_time, p_fb, pipeline, material->uniform_set, texture_uniform_set, projection, sky_transform, sky_scene_state.cam_transform.origin, p_luminance_multiplier, p_brightness_multiplier, border_size);
+	for (int i = 0; i < p_scene_data->camera_count(); i++) {
+		Basis orientation = sky_transform * p_scene_data->cameras[i].cam_transform.basis;
+		_render_sky(p_draw_list, p_time, p_fb, pipeline, material->uniform_set, texture_uniform_set, projection, orientation, sky_scene_state.cam_transform.origin, p_luminance_multiplier, p_brightness_multiplier, border_size, i);
+	}
 }
 
 void SkyRD::invalidate_sky(Sky *p_sky) {

@@ -176,6 +176,7 @@ private:
 		BitField<RDD::BufferUsageBits> usage = {};
 		RDG::ResourceTracker *draw_tracker = nullptr;
 		int32_t transfer_worker_index = -1;
+		int32_t frames = 0;
 		uint64_t transfer_worker_operation = 0;
 	};
 
@@ -248,9 +249,11 @@ public:
 	 * @param p_data		CPU data to transfer to GPU.
 	 *						Pointer can be deleted after buffer_update returns.
 	 * @param p_skip_check	Must always be false for user-facing public API. See remarks.
+	 * @param p_frame_index The frame of the buffer to copy to.
+	 * @param p_frames		The amount of frames to copy. This is preferred for setting frames in a dynamic buffer thanks to alignments.
 	 * @return				Status result of the operation.
 	 */
-	Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data, bool p_skip_check = false);
+	Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data, bool p_skip_check = false, int p_frame_index = 0, int p_frames = 0);
 	Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
 	Vector<uint8_t> buffer_get_data(RID p_buffer, uint32_t p_offset = 0, uint32_t p_size = 0); // This causes stall, only use to retrieve large buffers for saving.
 	Error buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset = 0, uint32_t p_size = 0);
@@ -1027,14 +1030,14 @@ public:
 	/**** BUFFERS ****/
 	/*****************/
 
-	RID uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
-	RID _uniform_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
-		return uniform_buffer_create(p_size_bytes, p_data, p_creation_bits);
+	RID uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0, uint32_t p_frames = 0);
+	RID _uniform_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<BufferCreationBits> p_creation_bits = 0, uint32_t p_frames = 0) {
+		return uniform_buffer_create(p_size_bytes, p_data, p_creation_bits, p_frames);
 	}
 
-	RID storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<StorageBufferUsage> p_usage = 0, BitField<BufferCreationBits> p_creation_bits = 0);
-	RID _storage_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<StorageBufferUsage> p_usage = 0, BitField<BufferCreationBits> p_creation_bits = 0) {
-		return storage_buffer_create(p_size_bytes, p_data, p_usage, p_creation_bits);
+	RID storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<StorageBufferUsage> p_usage = 0, BitField<BufferCreationBits> p_creation_bits = 0, uint32_t p_frames = 0);
+	RID _storage_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<StorageBufferUsage> p_usage = 0, BitField<BufferCreationBits> p_creation_bits = 0, uint32_t p_frames = 0) {
+		return storage_buffer_create(p_size_bytes, p_data, p_usage, p_creation_bits, p_frames);
 	}
 
 	RID texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, Span<uint8_t> p_data = {});
@@ -1276,6 +1279,7 @@ private:
 			uint32_t uniform_set_format = 0;
 			RDD::UniformSetID uniform_set_driver_id;
 			RID uniform_set;
+			TightLocalVector<int> dynamic_frames;
 			bool bound = false;
 		};
 
@@ -1379,7 +1383,8 @@ public:
 
 	void draw_list_set_blend_constants(DrawListID p_list, const Color &p_color);
 	void draw_list_bind_render_pipeline(DrawListID p_list, RID p_render_pipeline);
-	void draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index);
+	void draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index, VectorView<int> p_dynamic_frames = VectorView<int>());
+	void _draw_list_bind_uniform_set_bind(DrawListID p_list, RID p_uniform_set, uint32_t p_index, const Vector<int> &p_dynamic_frames = Vector<int>());
 	void draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array);
 	void draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets = Vector<uint64_t>());
 	void draw_list_bind_index_array(DrawListID p_list, RID p_index_array);
@@ -1392,6 +1397,14 @@ public:
 	void draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect);
 	void draw_list_enable_scissor(DrawListID p_list, const Rect2 &p_rect);
 	void draw_list_disable_scissor(DrawListID p_list);
+	void draw_list_set_stencil_masks(DrawListID p_list, uint32_t p_face_mask, uint32_t p_reference, uint32_t p_compare_mask = STENCIL_MASK_DEFAULT, uint32_t p_write_mask = STENCIL_MASK_DEFAULT);
+
+	//
+
+#ifdef EXTENDED_DYNAMIC_STATE
+	void draw_list_set_stencil_enabled(DrawListID p_list, bool p_enabled);
+	void draw_list_set_stencil_operators(DrawListID p_list, uint32_t p_face_mask, StencilOperation p_fail, StencilOperation p_pass, StencilOperation p_depth_fail, CompareOperator p_compare);
+#endif // EXTENDED_DYNAMIC_STATE
 
 	uint32_t draw_list_get_current_pass();
 	DrawListID draw_list_switch_to_next_pass();
@@ -1773,7 +1786,7 @@ private:
 
 	RID _uniform_set_create(const TypedArray<RDUniform> &p_uniforms, RID p_shader, uint32_t p_shader_set);
 
-	Error _buffer_update_bind(RID p_buffer, uint32_t p_offset, uint32_t p_size, const Vector<uint8_t> &p_data);
+	Error _buffer_update_bind(RID p_buffer, uint32_t p_offset, uint32_t p_size, const Vector<uint8_t> &p_data, int p_frame_index = 0, int p_frames = 0);
 
 	RID _render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const Ref<RDPipelineRasterizationState> &p_rasterization_state, const Ref<RDPipelineMultisampleState> &p_multisample_state, const Ref<RDPipelineDepthStencilState> &p_depth_stencil_state, const Ref<RDPipelineColorBlendState> &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);
 	RID _compute_pipeline_create(RID p_shader, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);

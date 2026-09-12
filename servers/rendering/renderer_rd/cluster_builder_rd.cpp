@@ -31,6 +31,7 @@
 #include "cluster_builder_rd.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h"
+#include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 	RD::VertexFormatID vertex_format;
@@ -313,17 +314,115 @@ void ClusterBuilderRD::_clear() {
 	cluster_render_buffer = RID();
 	element_buffer = RID();
 
-	memfree(render_elements);
+	// memfree(render_elements);
 
-	render_elements = nullptr;
+	// render_elements = nullptr;
+	render_elements.clear();
 	render_element_max = 0;
-	render_element_count = 0;
+	// render_element_count = 0;
+
+	portal_count = 0;
+	cluster_portals.clear();
 
 	RD::get_singleton()->free_rid(framebuffer);
 	framebuffer = RID();
 
 	cluster_render_uniform_set = RID();
 	cluster_store_uniform_set = RID();
+}
+
+void ClusterBuilderRD::_make_uniform_sets(RID p_depth_buffer, RID p_depth_buffer_sampler, RID p_color_buffer) {
+	{
+		LocalVector<RD::Uniform> uniforms;
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 1;
+			u.append_id(element_buffer);
+			uniforms.push_back(u);
+		}
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 2;
+			u.append_id(cluster_render_buffer);
+			uniforms.push_back(u);
+		}
+
+		cluster_render_uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(shared->cluster_render.shader, 0, uniforms);
+	}
+
+	{
+		LocalVector<RD::Uniform> uniforms;
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 1;
+			u.append_id(cluster_render_buffer);
+			uniforms.push_back(u);
+		}
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 2;
+			u.append_id(cluster_buffer);
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 3;
+			u.append_id(element_buffer);
+			uniforms.push_back(u);
+		}
+
+		cluster_store_uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(shared->cluster_store.shader, 0, uniforms);
+	}
+
+	if (p_color_buffer.is_valid()) {
+		LocalVector<RD::Uniform> uniforms;
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 1;
+			u.append_id(cluster_buffer);
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+			u.binding = 2;
+			u.append_id(p_color_buffer);
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+			u.binding = 3;
+			u.append_id(p_depth_buffer);
+			uniforms.push_back(u);
+		}
+
+		{
+			RID sampler = p_depth_buffer_sampler;
+			if (sampler.is_null()) {
+				sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+			}
+
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
+			u.binding = 4;
+			u.append_id(sampler);
+			uniforms.push_back(u);
+		}
+
+		debug_uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(shared->cluster_debug.shader, 0, uniforms);
+	} else {
+		debug_uniform_set = RID();
+	}
 }
 
 void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID p_depth_buffer, RID p_depth_buffer_sampler, RID p_color_buffer) {
@@ -343,22 +442,26 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 		max_elements_by_type += 32 - (max_elements_by_type % 32);
 	}
 
-	cluster_buffer_size = cluster_screen_size.x * cluster_screen_size.y * (max_elements_by_type / 32 + 32) * ELEMENT_TYPE_MAX * 4;
+	cluster_buffer_size = cluster_screen_size.x * cluster_screen_size.y * (max_elements_by_type / 32 + 32) * ELEMENT_TYPE_MAX * sizeof(uint32_t);
+	cluster_buffer_base_size = cluster_buffer_size;
+	cluster_buffer_capacity = cluster_buffer_size;
 
 	render_element_max = max_elements_by_type * ELEMENT_TYPE_MAX;
 
 	uint32_t element_tag_bits_size = render_element_max / 32;
 	uint32_t element_tag_depth_bits_size = render_element_max;
 
-	cluster_render_buffer_size = cluster_screen_size.x * cluster_screen_size.y * (element_tag_bits_size + element_tag_depth_bits_size) * 4; // Tag bits (element was used) and tag depth (depth range in which it was used).
+	cluster_render_buffer_size = cluster_screen_size.x * cluster_screen_size.y * (element_tag_bits_size + element_tag_depth_bits_size) * sizeof(uint32_t); // Tag bits (element was used) and tag depth (depth range in which it was used).
+	cluster_render_buffer_capacity = cluster_render_buffer_size;
 
-	cluster_render_buffer = RD::get_singleton()->storage_buffer_create(cluster_render_buffer_size);
-	cluster_buffer = RD::get_singleton()->storage_buffer_create(cluster_buffer_size);
+	element_buffer_capacity = sizeof(RenderElementData) * render_element_max;
 
-	render_elements = static_cast<RenderElementData *>(memalloc(sizeof(RenderElementData) * render_element_max));
-	render_element_count = 0;
+	cluster_render_buffer = RD::get_singleton()->storage_buffer_create(cluster_render_buffer_capacity);
+	cluster_buffer = RD::get_singleton()->storage_buffer_create(cluster_buffer_capacity);
+	element_buffer = RD::get_singleton()->storage_buffer_create(element_buffer_capacity);
 
-	element_buffer = RD::get_singleton()->storage_buffer_create(sizeof(RenderElementData) * render_element_max);
+	// render_elements = static_cast<RenderElementData *>(memalloc(sizeof(RenderElementData) * render_element_max));
+	// render_element_count = 0;
 
 	uint32_t div_value = 1 << divisor;
 	if (use_msaa) {
@@ -367,100 +470,10 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 		framebuffer = RD::get_singleton()->framebuffer_create_empty(p_screen_size / div_value);
 	}
 
-	{
-		Vector<RD::Uniform> uniforms;
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-			u.binding = 1;
-			u.append_id(state_uniform);
-			uniforms.push_back(u);
-		}
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 2;
-			u.append_id(element_buffer);
-			uniforms.push_back(u);
-		}
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 3;
-			u.append_id(cluster_render_buffer);
-			uniforms.push_back(u);
-		}
-
-		cluster_render_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shared->cluster_render.shader, 0);
-	}
-
-	{
-		Vector<RD::Uniform> uniforms;
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 1;
-			u.append_id(cluster_render_buffer);
-			uniforms.push_back(u);
-		}
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 2;
-			u.append_id(cluster_buffer);
-			uniforms.push_back(u);
-		}
-
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 3;
-			u.append_id(element_buffer);
-			uniforms.push_back(u);
-		}
-
-		cluster_store_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shared->cluster_store.shader, 0);
-	}
-
-	if (p_color_buffer.is_valid()) {
-		Vector<RD::Uniform> uniforms;
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-			u.binding = 1;
-			u.append_id(cluster_buffer);
-			uniforms.push_back(u);
-		}
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_IMAGE;
-			u.binding = 2;
-			u.append_id(p_color_buffer);
-			uniforms.push_back(u);
-		}
-
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			u.binding = 3;
-			u.append_id(p_depth_buffer);
-			uniforms.push_back(u);
-		}
-		{
-			RD::Uniform u;
-			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER;
-			u.binding = 4;
-			u.append_id(p_depth_buffer_sampler);
-			uniforms.push_back(u);
-		}
-
-		debug_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shared->cluster_debug.shader, 0);
-	} else {
-		debug_uniform_set = RID();
-	}
+	_make_uniform_sets(p_depth_buffer, p_depth_buffer_sampler, p_color_buffer);
 }
 
-void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y) {
+void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y, Span<PortalRenderInfo> p_portals) {
 	view_xform = p_view_transform.affine_inverse();
 	projection = p_cam_projection;
 	z_near = projection.get_z_near();
@@ -471,19 +484,179 @@ void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projecti
 		adjusted_projection.adjust_perspective_znear(0.0001);
 	}
 
+	portal_count = p_portals.size();
+	if (portal_count > cluster_portals.size()) {
+		// Never shrink - we want to save our list allocations
+		cluster_portals.resize(portal_count);
+	}
+
+	// Initialise portals
+	for (uint32_t i = 0; i < portal_count; i++) {
+		const PortalRenderInfo &portal = p_portals[i];
+		ClusterPortal &cluster_portal = cluster_portals[i];
+
+		cluster_portal.render_region.position = portal.region.position * screen_size;
+		cluster_portal.render_region.size = portal.region.size * screen_size;
+		
+		Vector2i min = (cluster_portal.render_region.position / cluster_size).floor().max(Vector2i(0, 0));
+		Vector2i max = (cluster_portal.render_region.get_end() / cluster_size).ceil().min(cluster_screen_size);
+		Vector2i size = max - min;
+		
+		cluster_portal.cluster_screen_offset = min;
+		cluster_portal.cluster_screen_size = size;
+		cluster_portal.cluster_type_size = size.x * size.y * (max_elements_by_type / 32 + 32);
+		cluster_portal.buffer_offset = 0;
+		cluster_portal.remap_length = 0;
+		cluster_portal.view_xform = portal.cam_transform.affine_inverse();
+
+		cluster_portal.remap.clear();
+		cluster_portal.render_elements.clear();
+		cluster_portal.render_element_offset = 0;
+		cluster_portal.render_buffer_offset = 0;
+		cluster_portal.render_element_max = 0;
+	}
+
+	// _prepare_for_portals();
+
 	Projection correction;
 	correction.set_depth_correction(p_flip_y);
 	projection = correction * projection;
 	adjusted_projection = correction * adjusted_projection;
 
 	// Reset counts.
-	render_element_count = 0;
+	render_elements.clear();
 	for (uint32_t i = 0; i < ELEMENT_TYPE_MAX; i++) {
 		cluster_count_by_type[i] = 0;
 	}
+
+	cluster_buffer_size = cluster_buffer_base_size;
+}
+
+void ClusterBuilderRD::_process_portals() {
+	uint32_t offset = cluster_screen_size.x * cluster_screen_size.y * (max_elements_by_type / 32 + 32) * ELEMENT_TYPE_MAX;
+	uint32_t render_buffer_size = cluster_screen_size.x * cluster_screen_size.y * (render_element_max / 32 + render_element_max);
+
+	for (uint32_t i = 0; i < portal_count; i++) {
+		ClusterPortal &cluster_portal = cluster_portals[i];
+
+		if (cluster_portal.cluster_screen_size.x * cluster_portal.cluster_screen_size.y == 0) {
+			// This portal shouldn't even be visible, skip
+			continue;
+		}
+
+		cluster_portal.buffer_offset = offset;
+		offset += cluster_portal.cluster_type_size * ELEMENT_TYPE_MAX;
+
+		// Handle our render buffer 
+		cluster_portal.render_buffer_offset = render_buffer_size;
+		cluster_portal.render_element_max = MIN(next_power_of_2(cluster_portal.render_elements.size()), render_element_max);
+		render_buffer_size += cluster_portal.cluster_screen_size.x * cluster_portal.cluster_screen_size.y * (cluster_portal.render_element_max / 32 + cluster_portal.render_element_max);
+
+		/* Setup index remap */
+
+		cluster_portal.remap_length = 0;
+		cluster_portal.remap.clear();
+
+		bool use_remap = false;
+		uint32_t type_counts[ELEMENT_TYPE_MAX];
+		float sort_values[ELEMENT_TYPE_MAX];
+
+		for (int j = 0; j < ELEMENT_TYPE_MAX; j++) {
+			type_counts[j] = 0;
+			sort_values[j] = -Math::INF;
+		}
+
+		// Count element types, and determine if we need to use the remap
+		for (RenderElementData &element : cluster_portal.render_elements) {
+			type_counts[element.type]++;
+			if (!use_remap) {
+				// Check if we aren't sorted (if we aren't, we do a remap)
+				float value = element.sort_value();
+				if (value < sort_values[element.type]) {
+					use_remap = true;
+				}
+				sort_values[element.type] = value;
+			}
+		}
+		
+		// Create remap
+		if (use_remap) {
+			for (int j = 0; j < ELEMENT_TYPE_MAX; j++) {
+				cluster_portal.remap_length = MAX(cluster_portal.remap_length, type_counts[j]);
+				type_counts[j] = 0; // Reset so we can count what we've mapped already
+			}
+
+			cluster_portal.render_elements.sort_custom<RenderElementData::SortComparator>();
+			cluster_portal.remap.resize(cluster_portal.remap_length * ELEMENT_TYPE_MAX);
+
+			for (RenderElementData &element : cluster_portal.render_elements) {
+				uint32_t mapped_index = type_counts[element.type]++;
+				cluster_portal.remap[mapped_index + element.type * cluster_portal.remap_length] = element.original_index;
+				element.original_index = mapped_index;
+			}
+
+			offset += cluster_portal.remap_length * ELEMENT_TYPE_MAX;
+		}
+
+		// Add render elements to main array
+		cluster_portal.render_element_offset = render_elements.size();
+		for (RenderElementData &element : cluster_portal.render_elements) {
+			render_elements.push_back(element);
+		}
+	}
+
+	cluster_buffer_size = offset * sizeof(uint32_t);
+	cluster_render_buffer_size = render_buffer_size * sizeof(uint32_t);
 }
 
 void ClusterBuilderRD::bake_cluster() {
+	// We need to remember our original size because `_process_portals` will add onto this array
+	uint32_t render_element_count = render_elements.size();
+	if (portal_count > 0) {
+		_process_portals();
+	}
+
+	bool remake_uniform_sets = false;
+
+	// Check if we need to resize any buffers
+
+	if (cluster_buffer_size > cluster_buffer_capacity) {
+		if (cluster_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(cluster_buffer);
+		}
+
+		// Resize cluster buffer
+		cluster_buffer_capacity = next_power_of_2(cluster_buffer_size);
+		cluster_buffer = RD::get_singleton()->storage_buffer_create(cluster_buffer_capacity);
+		remake_uniform_sets = true;
+	}
+	
+	if (cluster_render_buffer_size > cluster_render_buffer_capacity) {
+		if (cluster_render_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(cluster_render_buffer);
+		}
+
+		// Resize cluster render buffer
+		cluster_render_buffer_capacity = next_power_of_2(cluster_render_buffer_size);
+		cluster_render_buffer = RD::get_singleton()->storage_buffer_create(cluster_render_buffer_capacity);
+		remake_uniform_sets = true;
+	}
+
+	if (render_elements.size() * sizeof(RenderElementData) > element_buffer_capacity) {
+		if (element_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(element_buffer);
+		}
+
+		// Resize element buffer
+		element_buffer_capacity = next_power_of_2(render_elements.size() * sizeof(RenderElementData));
+		element_buffer = RD::get_singleton()->storage_buffer_create(element_buffer_capacity);
+		remake_uniform_sets = true;
+	}
+
+	if (remake_uniform_sets) {
+		_make_uniform_sets(RID(), RID(), RID());
+	}
+
 	RENDER_TIMESTAMP("> Bake 3D Cluster");
 
 	RD::get_singleton()->draw_command_begin_label("Bake Light Cluster");
@@ -491,13 +664,15 @@ void ClusterBuilderRD::bake_cluster() {
 	// Clear cluster buffer.
 	RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size);
 
-	if (render_element_count > 0) {
+	if (!render_elements.is_empty()) {
 		// Clear render buffer.
 		RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
 
+		/*
 		{ // Fill state uniform.
 
 			StateUniform state;
+			state.projection = adjusted_projection;
 
 			RendererRD::MaterialStorage::store_camera(adjusted_projection, state.projection);
 			state.inv_z_far = 1.0 / z_far;
@@ -510,10 +685,20 @@ void ClusterBuilderRD::bake_cluster() {
 
 			RD::get_singleton()->buffer_update(state_uniform, 0, sizeof(StateUniform), &state);
 		}
+		*/
+
+		// Fill portal index remaps
+		for (uint32_t i = 0; i < portal_count; i++) {
+			const ClusterPortal &portal = get_cluster_portal(i);
+			if (portal.remap_length > 0) {
+				uint32_t offset = portal.buffer_offset + portal.cluster_type_size * ELEMENT_TYPE_MAX;
+				RD::get_singleton()->buffer_update(cluster_buffer, offset * sizeof(uint32_t), portal.remap_length * ELEMENT_TYPE_MAX * sizeof(uint32_t), portal.remap.ptr());
+			}
+		}
 
 		// Update instances.
 
-		RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * render_element_count, render_elements);
+		RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * render_elements.size(), render_elements.ptr());
 
 		RENDER_TIMESTAMP("Render 3D Cluster Elements");
 
@@ -525,8 +710,51 @@ void ClusterBuilderRD::bake_cluster() {
 			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, shared->cluster_render.shader_pipelines[use_msaa ? ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_MSAA : ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_NORMAL]);
 			RD::get_singleton()->draw_list_bind_uniform_set(draw_list, cluster_render_uniform_set, 0);
 
-			for (uint32_t i = 0; i < render_element_count;) {
-				push_constant.base_index = i;
+			push_constant.projection = adjusted_projection;
+			push_constant.base_offset = 0;
+			push_constant.dest_offset = 0;
+			push_constant.cluster_screen_width = cluster_screen_size.width;
+			push_constant.cluster_depth_offset = (render_element_max / 32);
+			push_constant.cluster_data_size = push_constant.cluster_depth_offset + render_element_max;
+			push_constant.screen_to_clusters_shift = get_shift_from_power_of_2(cluster_size);
+			push_constant.screen_to_clusters_shift -= divisor; //screen is smaller, shift one less
+			push_constant.inv_z_far = 1.0 / z_far;
+			push_constant.cluster_screen_offset = std430_uvec2(0);
+
+			uint32_t element_count = render_element_count;
+			for (uint32_t i = 0, base_index = 0, portal_index = -1; i < render_elements.size();) {
+				if (base_index >= element_count) {
+					// Next portal
+					base_index = 0;
+					portal_index++;
+					if (portal_index >= portal_count) {
+						break;
+					}
+
+					const ClusterPortal &portal = get_cluster_portal(portal_index);
+
+					if (portal.cluster_screen_size.x * portal.cluster_screen_size.y == 0) {
+						// This portal shouldn't even be visible, skip
+						continue;
+					}
+
+					push_constant.base_offset = portal.render_element_offset;
+					push_constant.dest_offset = portal.render_buffer_offset;
+					push_constant.cluster_screen_width = portal.cluster_screen_size.width;
+					push_constant.cluster_depth_offset = portal.render_element_max / 32;
+					push_constant.cluster_data_size = push_constant.cluster_depth_offset + portal.render_element_max;
+					push_constant.cluster_screen_offset = portal.cluster_screen_offset;
+					element_count = portal.render_elements.size();
+
+					Rect2 region = portal.render_region;
+					uint32_t div_value = 1 << divisor;
+					region.position /= div_value;
+					region.size /= div_value;
+					RD::get_singleton()->draw_list_enable_scissor(draw_list, region);
+				}
+
+				push_constant.base_index = base_index;
+
 				switch (render_elements[i].type) {
 					case ELEMENT_TYPE_OMNI_LIGHT: {
 						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
@@ -553,9 +781,10 @@ void ClusterBuilderRD::bake_cluster() {
 
 				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
 
-				uint32_t instances = 1;
+				uint32_t instances = 1; // Were we gonna do something with this and just forgot?
 				RD::get_singleton()->draw_list_draw(draw_list, true, instances);
 				i += instances;
+				base_index += instances;
 			}
 			RD::get_singleton()->draw_list_end();
 		}
@@ -570,17 +799,38 @@ void ClusterBuilderRD::bake_cluster() {
 			ClusterBuilderSharedDataRD::ClusterStore::PushConstant push_constant;
 			push_constant.cluster_render_data_size = render_element_max / 32 + render_element_max;
 			push_constant.max_render_element_count_div_32 = render_element_max / 32;
-			push_constant.cluster_screen_size[0] = cluster_screen_size.x;
-			push_constant.cluster_screen_size[1] = cluster_screen_size.y;
+			push_constant.cluster_screen_size = cluster_screen_size;
 
 			push_constant.render_element_count_div_32 = Math::division_round_up(render_element_count, 32U);
 			push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
-			push_constant.pad1 = 0;
-			push_constant.pad2 = 0;
+			push_constant.render_buffer_offset = 0;
+			push_constant.dest_buffer_offset = 0;
+			push_constant.element_buffer_offset = 0;
 
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
-
 			RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+
+			for (uint32_t i = 0; i < portal_count; i++) {
+				const ClusterPortal &portal = get_cluster_portal(i);
+
+				if (portal.cluster_screen_size.x * portal.cluster_screen_size.y == 0) {
+					// This portal shouldn't even be visible, skip
+					continue;
+				}
+
+				push_constant.cluster_render_data_size = portal.render_element_max / 32 + portal.render_element_max;
+				push_constant.max_render_element_count_div_32 = portal.render_element_max / 32;
+				push_constant.cluster_screen_size = portal.cluster_screen_size;
+				
+				push_constant.render_element_count_div_32 = Math::division_round_up(portal.render_elements.size(), 32U);
+				// push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
+				push_constant.render_buffer_offset = portal.render_buffer_offset;
+				push_constant.dest_buffer_offset = portal.buffer_offset;
+				push_constant.element_buffer_offset = portal.render_element_offset;
+
+				RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
+				RD::get_singleton()->compute_list_dispatch_threads(compute_list, portal.cluster_screen_size.x, portal.cluster_screen_size.y, 1);
+			}
 
 			RD::get_singleton()->compute_list_end();
 		}
@@ -631,10 +881,10 @@ void ClusterBuilderRD::set_shared(ClusterBuilderSharedDataRD *p_shared) {
 }
 
 ClusterBuilderRD::ClusterBuilderRD() {
-	state_uniform = RD::get_singleton()->uniform_buffer_create(sizeof(StateUniform));
+	// state_uniform = RD::get_singleton()->uniform_buffer_create(sizeof(StateUniform));
 }
 
 ClusterBuilderRD::~ClusterBuilderRD() {
 	_clear();
-	RD::get_singleton()->free_rid(state_uniform);
+	// RD::get_singleton()->free_rid(state_uniform);
 }

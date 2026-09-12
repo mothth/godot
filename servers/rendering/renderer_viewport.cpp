@@ -832,6 +832,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 
 	int vertices_drawn = 0;
 	int objects_drawn = 0;
+	int portals_drawn = 0;
 	int draw_calls_used = 0;
 
 	for (int i = 0; i < sorted_active_viewports.size(); i++) {
@@ -936,7 +937,9 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 		// 3D render info.
 		objects_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME];
 		vertices_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME];
+		portals_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_PORTALS_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_PORTALS_IN_FRAME];
 		draw_calls_used += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME];
+		
 		// 2D render info.
 		objects_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_CANVAS][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME];
 		vertices_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_CANVAS][RS::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME];
@@ -947,6 +950,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 
 	total_objects_drawn = objects_drawn;
 	total_vertices_drawn = vertices_drawn;
+	total_portals_drawn = portals_drawn;
 	total_draw_calls_used = draw_calls_used;
 
 	RENDER_TIMESTAMP("< Render Viewports");
@@ -1783,6 +1787,9 @@ int RendererViewport::get_total_objects_drawn() const {
 }
 int RendererViewport::get_total_primitives_drawn() const {
 	return total_vertices_drawn;
+}
+int RendererViewport::get_total_portals_drawn() const {
+	return total_portals_drawn;
 }
 int RendererViewport::get_total_draw_calls_used() const {
 	return total_draw_calls_used;

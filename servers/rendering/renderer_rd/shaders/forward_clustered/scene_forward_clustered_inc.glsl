@@ -295,20 +295,19 @@ layout(set = 0, binding = 16) uniform texture2D dfg;
 
 layout(set = 1, binding = 0, std140) uniform SceneDataBlock {
 	SceneData data;
+#ifdef MOTION_VECTORS
 	SceneData prev_data;
-}
-scene_data_block;
+#endif
+} scene_data_block;
+
+#define IMPLEMENTATION_DATA_FLAGS_IN_OPAQUE_PASS (1 << 0)
+#define IMPLEMENTATION_DATA_FLAGS_USE_ROUGHNESS_LIMITER (1 << 1)
 
 struct ImplementationData {
-	uint cluster_shift;
-	uint cluster_width;
-	uint cluster_type_size;
-	uint max_cluster_element_count_div_32;
-
 	uint ss_effects_flags;
 	float ssao_light_affect;
 	float ssao_ao_affect;
-	uint pad1;
+	uint flags;
 
 	mat4 sdf_to_bounds;
 
@@ -318,10 +317,38 @@ struct ImplementationData {
 	ivec3 sdf_size;
 	bool gi_upscale_for_msaa;
 
-	bool volumetric_fog_enabled;
-	float volumetric_fog_inv_length;
-	float volumetric_fog_detail_spread;
-	uint volumetric_fog_pad;
+	uint cluster_shift;
+	// uint cluster_width;
+	// uint cluster_type_size;
+	uint max_cluster_element_count_div_32;
+
+	// Moved to SceneData
+	// bool volumetric_fog_enabled;
+	// float volumetric_fog_inv_length;
+	// float volumetric_fog_detail_spread;
+
+	/* Moved from SceneData */
+
+	vec2 shadow_atlas_pixel_size;
+	vec2 directional_shadow_pixel_size;
+	vec2 reflection_atlas_border_size;
+
+	float roughness_limiter_amount;
+	float roughness_limiter_limit;
+	float opaque_prepass_threshold;
+
+	float pass_alpha_multiplier;
+
+	uint camera_count;
+	uint pad4;
+	uint pad5;
+	uint pad6;
+
+	// Use vec4s because std140 doesn't play nice with vec2s, z and w are wasted.
+	vec4 directional_penumbra_shadow_kernel[32];
+	vec4 directional_soft_shadow_kernel[32];
+	vec4 penumbra_shadow_kernel[32];
+	vec4 soft_shadow_kernel[32];
 };
 
 layout(set = 1, binding = 1, std140) uniform ImplementationDataBlock {

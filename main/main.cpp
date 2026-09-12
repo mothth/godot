@@ -2409,8 +2409,12 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	// Start with RenderingDevice-based backends.
 #ifdef RD_ENABLED
+#ifdef MOBILE_RENDERER_DISABLED
+	renderer_hints = "forward_plus";
+#else
 	renderer_hints = "forward_plus,mobile";
 	default_renderer_mobile = "mobile";
+#endif
 #endif
 
 	// And Compatibility next, or first if Vulkan is disabled.

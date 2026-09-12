@@ -42,6 +42,7 @@
 #include "servers/rendering/dummy/storage/mesh_storage.h"
 #include "servers/rendering/dummy/storage/particles_storage.h"
 #include "servers/rendering/dummy/storage/texture_storage.h"
+#include "servers/rendering/dummy/storage/portal_storage.h"
 #include "servers/rendering/dummy/storage/utilities.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_server.h"
@@ -60,6 +61,7 @@ protected:
 	RendererDummy::MeshStorage mesh_storage;
 	RendererDummy::ParticlesStorage particles_storage;
 	RendererDummy::TextureStorage texture_storage;
+	RendererDummy::PortalStorage portal_storage;
 	RendererDummy::GI gi;
 	RendererDummy::Fog fog;
 	RasterizerSceneDummy scene;
@@ -71,6 +73,7 @@ public:
 	RendererMeshStorage *get_mesh_storage() override { return &mesh_storage; }
 	RendererParticlesStorage *get_particles_storage() override { return &particles_storage; }
 	RendererTextureStorage *get_texture_storage() override { return &texture_storage; }
+	RendererPortalStorage *get_portal_storage() override { return &portal_storage; }
 	RendererGI *get_gi() override { return &gi; }
 	RendererFog *get_fog() override { return &fog; }
 	RendererCanvasRender *get_canvas() override { return &canvas; }

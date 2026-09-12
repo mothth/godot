@@ -251,6 +251,7 @@ void main() {
 
 #endif // MODE_SIMPLE_COPY_DEPTH
 
+// I don't know under what circumstances this is used, but this poses a problem for portal rendering, as we will have an oblique projection matirx...
 #ifdef MODE_LINEARIZE_DEPTH_COPY
 
 	float depth = texelFetch(source_color, pos + params.section.xy, 0).r;

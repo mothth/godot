@@ -159,7 +159,6 @@ public:
 			CULL_VARIANT_REVERSED,
 			CULL_VARIANT_DOUBLE_SIDED,
 			CULL_VARIANT_MAX
-
 		};
 
 		enum AlphaAntiAliasing {
@@ -195,6 +194,7 @@ public:
 			ShaderSpecialization shader_specialization = {};
 			uint32_t wireframe = false;
 			uint32_t ubershader = false;
+			bool portal_stencil = false;
 
 			uint32_t hash() const {
 				uint32_t h = hash_murmur3_one_64(vertex_format_id);
@@ -208,6 +208,7 @@ public:
 				h = hash_murmur3_one_32(shader_specialization.packed_2, h);
 				h = hash_murmur3_one_32(wireframe, h);
 				h = hash_murmur3_one_32(ubershader, h);
+				h = hash_murmur3_one_32((uint32_t)portal_stencil, h);
 				return hash_fmix32(h);
 			}
 		};
@@ -351,6 +352,7 @@ public:
 	RID debug_shadow_splits_material_shader;
 	RID debug_shadow_splits_material;
 	RID default_shader_rd;
+	RID default_shader_motion_vectors_rd;
 	RID default_shader_sdfgi_rd;
 
 	RID default_vec4_xform_buffer;

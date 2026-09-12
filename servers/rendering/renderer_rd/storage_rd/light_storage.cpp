@@ -542,6 +542,13 @@ void LightStorage::light_instance_mark_visible(RID p_light_instance) {
 	light_instance->last_scene_pass = RendererSceneRenderRD::get_singleton()->get_scene_pass();
 }
 
+void LightStorage::light_instance_set_portal_mask(RID p_light_instance, const PortalMaskData *p_mask) {
+	LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
+	ERR_FAIL_NULL(light_instance);
+
+	light_instance->portal_mask = p_mask;
+}
+
 /* LIGHT DATA */
 
 void LightStorage::free_light_data() {
@@ -608,7 +615,8 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
-	Transform3D inverse_transform = p_camera_transform.affine_inverse();
+	// We have to store light data in world space now, thanks to portals
+	// Transform3D inverse_transform = p_camera_transform.affine_inverse();
 
 	r_directional_light_count = 0;
 	r_positional_light_count = 0;
@@ -618,14 +626,21 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 	r_directional_light_soft_shadows = false;
 
+	PortalMaskData::List portal_list(p_render_data->portal_count()+1);
+	PersistentPagedArray<PortalMaskData> parity_masks;
+	parity_masks.set_page_pool(&parity_mask_pool);
+
 	for (int i = 0; i < (int)p_lights.size(); i++) {
 		LightInstance *light_instance = light_instance_owner.get_or_null(p_lights[i]);
 		if (!light_instance) {
 			continue;
 		}
+
 		Light *light = light_owner.get_or_null(light_instance->light);
 
 		ERR_CONTINUE(light == nullptr);
+
+		light_instance->parity_mask = nullptr;
 
 		switch (light->type) {
 			case RS::LIGHT_DIRECTIONAL: {
@@ -637,7 +652,8 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 				Transform3D light_transform = light_instance->transform;
 
-				Vector3 direction = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, 1))).normalized();
+				// Vector3 direction = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, 1))).normalized();
+				Vector3 direction = light_transform.basis.xform(Vector3(0, 0, 1)).normalized();
 
 				light_data.direction[0] = direction.x;
 				light_data.direction[1] = direction.y;
@@ -715,7 +731,11 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 						Projection rectm;
 						rectm.set_light_atlas_rect(atlas_rect);
 
-						Transform3D modelview = (inverse_transform * light_instance->shadow_transform[j].transform).inverse();
+						// Transform3D modelview = (inverse_transform * light_instance->shadow_transform[j].transform).inverse();
+
+						// In the shader, we do `shadow_matrix * inv_view_matrix`, which should give the same result
+						// as what `shadow_matrix` used to be.
+						Transform3D modelview = light_instance->shadow_transform[j].transform.inverse();
 
 						Projection shadow_mtx = rectm * bias * matrix * modelview;
 						light_data.shadow_split_offsets[j] = split;
@@ -756,33 +776,12 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 				r_directional_light_count++;
 			} break;
-			case RS::LIGHT_OMNI: {
-				if (omni_light_count >= max_lights) {
-					continue;
-				}
-
-				Transform3D light_transform = light_instance->transform;
-				const real_t distance = p_camera_transform.origin.distance_to(light_transform.origin);
-
-				if (light->distance_fade) {
-					const float fade_begin = light->distance_fade_begin;
-					const float fade_length = light->distance_fade_length;
-
-					if (distance > fade_begin) {
-						if (distance > fade_begin + fade_length) {
-							// Out of range, don't draw this light to improve performance.
-							continue;
-						}
-					}
-				}
-
-				omni_light_sort[omni_light_count].light_instance = light_instance;
-				omni_light_sort[omni_light_count].light = light;
-				omni_light_sort[omni_light_count].depth = distance;
-				omni_light_count++;
-			} break;
+			
+			case RS::LIGHT_OMNI: 
 			case RS::LIGHT_SPOT: {
-				if (spot_light_count >= max_lights) {
+				uint32_t &light_count = (light->type == RS::LIGHT_OMNI) ? omni_light_count : spot_light_count;
+				LightInstanceDepthSort *light_sort = (light->type == RS::LIGHT_OMNI) ? omni_light_sort : spot_light_sort;
+				if (light_count >= max_lights) {
 					continue;
 				}
 
@@ -792,8 +791,68 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				if (light->distance_fade) {
 					const float fade_begin = light->distance_fade_begin;
 					const float fade_length = light->distance_fade_length;
+					const float fade_shadow = light->distance_fade_shadow;
 
-					if (distance > fade_begin) {
+					if (light_instance->portal_mask) {
+						// If we have fade enabled with portals, then we have to account for portals specifically.
+						// Any views of the light with no fading is grouped into the same index, while each faded view needs its own index.
+						// We know what portals have a non-faded version of this light if it is included in the "parity" mask.
+						// (If there is no parity mask, there are either only non-faded versions or faded versions, so it isn't needed.)
+		
+						light_instance->portal_mask->get_portals(portal_list);
+						int count = portal_list.portal_count();
+						int last_parity_portal = -1;
+						PortalMaskData *parity_mask = nullptr;
+						const RenderSceneDataRD &scene_data = *p_render_data->scene_data;
+
+						// Iterate portals
+						for (int j = 0; j < count; j++) {
+							int portal_index = portal_list[j]; 
+							real_t dist = scene_data.get_camera_transform(portal_index).origin.distance_to(light_transform.origin);
+
+							// Faded light
+							if (dist > fade_begin || dist > fade_shadow) {
+								if (dist > fade_begin + fade_length || light_count >= max_lights-1) {
+									// Light isn't visible, or we're almost at the max light count, but purposefully leaving one in case
+									// we want to draw parity versions (those collectively only count as one light, but may not have been added yet.)
+									continue;
+								}
+
+								if (parity_mask == nullptr && last_parity_portal >= 0) {
+									// We're gonna need a parity mask, create it if we haven't already
+									parity_mask = parity_masks.push_unordered(light_instance->portal_mask->sub_mask(0, last_parity_portal + 1));
+								}
+
+								// Create unique portal version
+								light_sort[light_count].light_instance = light_instance;
+								light_sort[light_count].light = light;
+								light_sort[light_count].depth = dist;
+								light_sort[light_count].portal_index = portal_index;
+								light_count++;
+							}
+							// Non-faded light
+							else {
+								if (parity_mask == nullptr && last_parity_portal < 0 && j != 0) {
+									// We have already drawn faded lights, so also create a parity mask here if we haven't yet
+									parity_mask = parity_masks.push_unordered(PortalMaskData());
+									parity_mask->set_portal(portal_index);
+								}
+								else if (parity_mask != nullptr) {
+									parity_mask->set_portal(portal_index);
+								}
+
+								last_parity_portal = portal_index;
+							}
+						}
+
+						light_instance->parity_mask = parity_mask;
+						if (last_parity_portal < 0) {
+							// We don't have any parity views, so skip from here
+							continue;
+						}
+					} 
+					// No portal case
+					else if (distance > fade_begin) {
 						if (distance > fade_begin + fade_length) {
 							// Out of range, don't draw this light to improve performance.
 							continue;
@@ -801,10 +860,11 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 					}
 				}
 
-				spot_light_sort[spot_light_count].light_instance = light_instance;
-				spot_light_sort[spot_light_count].light = light;
-				spot_light_sort[spot_light_count].depth = distance;
-				spot_light_count++;
+				light_sort[light_count].light_instance = light_instance;
+				light_sort[light_count].light = light;
+				light_sort[light_count].depth = distance;
+				light_sort[light_count].portal_index = -1;
+				light_count++;
 			} break;
 		}
 
@@ -830,6 +890,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		LightInstance *light_instance = (i < omni_light_count) ? omni_light_sort[index].light_instance : spot_light_sort[index].light_instance;
 		Light *light = (i < omni_light_count) ? omni_light_sort[index].light : spot_light_sort[index].light;
 		real_t distance = (i < omni_light_count) ? omni_light_sort[index].depth : spot_light_sort[index].depth;
+		int portal_index = (i < omni_light_count) ? omni_light_sort[index].portal_index : spot_light_sort[index].portal_index;
 
 		if (using_forward_ids) {
 			forward_id_storage->map_forward_id(type == RS::LIGHT_OMNI ? RendererRD::FORWARD_ID_TYPE_OMNI_LIGHT : RendererRD::FORWARD_ID_TYPE_SPOT_LIGHT, light_instance->forward_id, index, light_instance->last_pass);
@@ -853,6 +914,11 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			fade_begin = light->distance_fade_begin;
 			fade_shadow = light->distance_fade_shadow;
 			fade_length = light->distance_fade_length;
+
+			if (light_instance->portal_mask != nullptr && portal_index < 0) {
+				// Forcibly stop a fade, because this is a parity element (the primary distance may not necessarily be in the non-fading range)
+				distance = 0;
+			}
 
 			// Use `smoothstep()` to make opacity changes more gradual and less noticeable to the player.
 			if (distance > fade_begin) {
@@ -895,13 +961,15 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		float radius = MAX(0.001, light->param[RS::LIGHT_PARAM_RANGE]);
 		light_data.inv_radius = 1.0 / radius;
 
-		Vector3 pos = inverse_transform.xform(light_transform.origin);
+		// Vector3 pos = inverse_transform.xform(light_transform.origin);
+		Vector3 pos = light_transform.origin;
 
 		light_data.position[0] = pos.x;
 		light_data.position[1] = pos.y;
 		light_data.position[2] = pos.z;
 
-		Vector3 direction = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, -1))).normalized();
+		// Vector3 direction = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, -1))).normalized();
+		Vector3 direction = (light_transform.basis.xform(Vector3(0, 0, -1))).normalized();
 
 		light_data.direction[0] = direction.x;
 		light_data.direction[1] = direction.y;
@@ -986,7 +1054,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.soft_shadow_scale = light->param[RS::LIGHT_PARAM_SHADOW_BLUR];
 
 			if (type == RS::LIGHT_OMNI) {
-				Transform3D proj = (inverse_transform * light_transform).inverse();
+				// Due to portals, we can't know our modelview before-hand, so we are using the inverse of the light transform
+				// so we can do `shadow_matrix * inv_view_matrix` in the shader
+				// Transform3D proj = (inverse_transform * light_transform).inverse();
+				Transform3D proj = light_transform.inverse();
 
 				RendererRD::MaterialStorage::store_transform(proj, light_data.shadow_matrix);
 
@@ -1001,15 +1072,17 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 				light_data.direction[0] = omni_offset.x * float(rect.size.width);
 				light_data.direction[1] = omni_offset.y * float(rect.size.height);
-			} else if (type == RS::LIGHT_SPOT) {
-				Transform3D modelview = (inverse_transform * light_transform).inverse();
+			}
+			else if (type == RS::LIGHT_SPOT) {
+				// Same business, we can use `shadow_matrix * inv_view_matrix` in the shader, even with our additional modifications down below
+				Transform3D proj = light_transform.inverse();
 				Projection bias;
 				bias.set_light_bias();
 
 				Projection correction;
 				correction.set_depth_correction(false, true, false);
 				Projection cm = correction * light_instance->shadow_transform[0].camera;
-				Projection shadow_mtx = bias * cm * modelview;
+				Projection shadow_mtx = bias * cm * proj;
 				RendererRD::MaterialStorage::store_camera(shadow_mtx, light_data.shadow_matrix);
 
 				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
@@ -1030,7 +1103,24 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_instance->cull_mask = light->cull_mask;
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle);
+		if (portal_index < 0) {
+			// All (or parity) portals
+			if (light_instance->portal_mask != nullptr) {
+				const PortalMaskData *mask = (light_instance->parity_mask) ? light_instance->parity_mask : light_instance->portal_mask;
+				mask->get_portals(portal_list);
+				for (int j = 0; j < portal_list.portal_count(); j++) {
+					RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, index, portal_list[j]);
+				}
+				// We won't be needing this now, will be freed when `parity_masks` is destructed
+				light_instance->parity_mask = nullptr;
+			}
+			else {
+				RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, index);
+			}
+		} else {
+			// This light is for a specific portal
+			RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, index, portal_index);
+		}
 
 		r_positional_light_count++;
 	}
@@ -1670,6 +1760,13 @@ bool LightStorage::reflection_probe_instance_postprocess_step(RID p_instance) {
 	return false;
 }
 
+void LightStorage::reflection_probe_instance_set_portal_mask(RID p_instance, const PortalMaskData *p_mask) {
+	ReflectionProbeInstance *rpi = reflection_probe_instance_owner.get_or_null(p_instance);
+	ERR_FAIL_NULL(rpi);
+
+	rpi->portal_mask = p_mask;
+}
+
 uint32_t LightStorage::reflection_probe_instance_get_resolution(RID p_instance) {
 	ReflectionProbeInstance *rpi = reflection_probe_instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL_V(rpi, 0);
@@ -1771,7 +1868,9 @@ void LightStorage::update_reflection_probe_buffer(RenderDataRD *p_render_data, c
 		sort_array.sort(reflection_sort, reflection_count);
 	}
 
+	PortalMaskData::List portal_list(p_render_data->portal_count()+1);
 	bool using_forward_ids = forward_id_storage->uses_forward_ids();
+
 	for (uint32_t i = 0; i < reflection_count; i++) {
 		ReflectionProbeInstance *rpi = reflection_sort[i].probe_instance;
 
@@ -1820,12 +1919,20 @@ void LightStorage::update_reflection_probe_buffer(RenderDataRD *p_render_data, c
 		reflection_ubo.ambient[1] = ambient_linear.g * interior_ambient_energy;
 		reflection_ubo.ambient[2] = ambient_linear.b * interior_ambient_energy;
 
+		// This camera transform might be a problem with portals - investigate later
 		Transform3D transform = rpi->transform;
 		Transform3D proj = (p_camera_inverse_transform * transform).inverse();
 		MaterialStorage::store_transform(proj, reflection_ubo.local_matrix);
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_reflection_probe(transform, extents);
+		if (rpi->portal_mask != nullptr) {
+			rpi->portal_mask->get_portals(portal_list);
+			for (int j = 0; j < portal_list.portal_count(); j++) {
+				RendererSceneRenderRD::get_singleton()->setup_added_reflection_probe(transform, extents, i, portal_list[j]);
+			}
+		} else {
+			RendererSceneRenderRD::get_singleton()->setup_added_reflection_probe(transform, extents, i);
+		}
 	}
 
 	if (reflection_count) {

@@ -470,7 +470,7 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 	return true;
 }
 
-bool RenderingLightCuller::prepare_camera(const Transform3D &p_cam_transform, const Projection &p_cam_matrix) {
+bool RenderingLightCuller::prepare_camera(const Transform3D &p_cam_transform, const Projection &p_cam_matrix, Span<PortalRenderInfo> p_portals) {
 	data.debug_count++;
 	if (data.debug_count >= 120) {
 		data.debug_count = 0;

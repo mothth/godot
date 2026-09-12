@@ -1152,6 +1152,120 @@
 				[b]Warning:[/b] This function is intended for debugging in the editor, and will pass through and return a zero [Rect2] in exported projects.
 			</description>
 		</method>
+		<method name="portal_create">
+			<return type="RID" />
+			<description>
+				Creates a portal and adds it to the RenderingServer. It can be accessed with the RID that is returned. This RID will be used in all [code]portal_*[/code] RenderingServer functions.
+				Once finished with your RID, you will want to free the RID using the RenderingServer's [method free_rid] method.
+				To place in a scene, attach this portal to an instance using [method instance_set_base] using the returned RID.
+				[b]Note:[/b] The equivalent node is [Portal3D].
+			</description>
+		</method>
+		<method name="portal_set_double_sided">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="double_sided" type="bool" />
+			<description>
+				Toggle a portal being double-sided / single-sided. Single-sided portals have back-face culling and can only be seen from the front.
+				The camera transform of a single-sided portal is also rotated 180 degrees, so a single-sided portal with a destination transform facing
+				the same direction as the portal's instance transform will have a camera that points back, like a mirror. Double-sided portals do not have this property.
+				Equivalent to [member Portal3D.double_sided].
+			</description>
+		</method>
+		<method name="portal_set_teleport_light">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="teleport_light" type="bool" />
+			<description>
+				Toggle a portal being capable of teleporting light. If enabled, dynamic light sources that enable portal teleportation will be able to cast light through portals.
+				This does not affect static light or global illumination. Equivalent to [member Portal3D.teleport_light].
+			</description>
+		</method>
+		<method name="portal_set_teleport_gi">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="teleport_gi" type="bool" />
+			<description>
+				Toggle a portal being capable of teleporting global illumination. If enabled, the portal will be taken into account in global illumination processing,
+				including statically baked lightmaps. This helps make static environmental portals more seamless. Equivalent to [member Portal3D.teleport_gi].
+			</description>
+		</method>
+		<method name="portal_set_mesh">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="mesh" type="RID" />
+			<description>
+				Set a custom mesh for this portal. By default, a portal is a plane 1m by 1m in size, facing the direction of the portal's front.
+				Therefore, the front of the custom mesh is considered the same, and the "size" of the portal is determined by the mesh's bounding-box,
+				projected from its view from the front. Note that the size of a portal can also be determined by the scale of its transform,
+				but both custom meshes and scaling are valid approaches if just a plane portal is needed, as long as the portal partner has the same mesh.
+				[b]Note:[/b] Avoid using meshes with multiple surfaces, as only the first surface will be used for rendering.
+				Equivalent to [member Portal3D.custom_mesh].
+			</description>
+		</method>
+		<method name="portal_set_destination_transform">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="transform" type="Transform3D" />
+			<description>
+				Set the destination transform for this portal. This should be the transform of the portal's partner.
+				[b]Note:[/b] If a portal is single-sided, this is rotated 180 degrees for rendering the portal.
+				Manual rotation of the transform for the portal is not needed in this case.
+			</description>
+		</method>
+		<method name="portal_set_scenario_override">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="scenario" type="RID" />
+			<description>
+				Override the scenario of the portal's destination. This is used to create something known as a [b]world portal[/b].
+				World portals can be used to create seamless transitions between level worlds that may have different environments,
+				scene lighting, ect. To keep using the portal's own scenario and remain a [b]local portal[/b], set this to a null RID.
+				[b]Note:[/b] If a camera sets its own environment, the environment of the other world through the portal will be overriden.
+			</description>
+		</method>
+		<method name="portal_set_environment_override">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="environment" type="RID" />
+			<description>
+				Override the environment the portal uses to render. This is used to achieve different post-processing effects in portals.
+				To keep using the environment of the portal's world, set this to a null RID.
+				[b]Note:[/b] If a camera sets its own environment, the portal's custom environment will be overriden.
+				Equivalent to [member Portal3D.custom_environment].
+			</description>
+		</method>
+		<method name="portal_set_recursive_depth">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="depth" type="int" />
+			<description>
+				Set the maximum recursive depth of the portal. This is capped by [member ProjectSettings.rendering/portals/max_recursive_depth].
+				To keep the maximum recursive depth always as high as it can be (as set in [ProjectSettings]), set this to -1.
+				Equivalent to [member Portal3D.max_recursion_depth].
+			</description>
+		</method>
+		<method name="portal_set_cull_mask">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="operator" type="int" enum="RenderingServer.PortalCullMaskOp" />
+			<param index="2" name="mask" type="int" />
+			<description>
+				Set the cull mask and its behaviour when culling objects visible within this portal. By default, the operator is [constant RenderingServer.PORTAL_CULL_MASK_OP_KEEP],
+				meaning the cull mask used by the portal is the same as what was used to cull that portal (by either the current camera or some parent portal view.)
+				Equivalent to [member Portal3D.cull_mask_operator] and [member Portal3D.cull_mask].
+			</description>
+		</method>
+		<method name="portal_set_cull_partner">
+			<return type="void" />
+			<param index="0" name="portal" type="RID" />
+			<param index="1" name="partner" type="RID" />
+			<description>
+				Set the cull partner of a portal, causing the portal to ignore it when culling objects within its view. This should be the RID of the portal's actual partner in the scene.
+				This does not override the portal's destination transform or other properties in any way - this is simply used to ensure the partner is not erroneously drawn
+				by the portal, leading to potentially unexpected results.
+			</description>
+		</method>
 		<method name="decal_create">
 			<return type="RID" />
 			<description>
@@ -4267,7 +4381,7 @@
 				Sets the viewport's width and height in pixels.
 			</description>
 		</method>
-		<method name="viewport_set_render_target_owner">
+		<method name="viewport_set_render_target_owner" deprecated="This was once used for portal rendering early in the prototype stage of The Story Machine, but has since been replaced with an in-engine portal implementation.">
 			<return type="void" />
 			<param index="0" name="viewport" type="RID" />
 			<param index="1" name="owner" type="RID" />
@@ -4275,7 +4389,7 @@
 				Set a viewport for this viewport to use the render target of.
 			</description>
 		</method>
-		<method name="viewport_set_priority">
+		<method name="viewport_set_priority" deprecated="This was once used for portal rendering early in the prototype stage of The Story Machine, but has since been replaced with an in-engine portal implementation.">
 			<return type="void" />
 			<param index="0" name="viewport" type="RID" />
 			<param index="1" name="priority" type="int" />
@@ -5284,10 +5398,13 @@
 		<constant name="VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME" value="1" enum="ViewportRenderInfo">
 			Number of points, lines, or triangles drawn in a single frame.
 		</constant>
-		<constant name="VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME" value="2" enum="ViewportRenderInfo">
+		<constant name="VIEWPORT_RENDER_INFO_PORTALS_IN_FRAME" value="2" enum="ViewportRenderInfo">
+			Number of portals drawn in a single frame.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME" value="3" enum="ViewportRenderInfo">
 			Number of draw calls during this frame.
 		</constant>
-		<constant name="VIEWPORT_RENDER_INFO_MAX" value="3" enum="ViewportRenderInfo">
+		<constant name="VIEWPORT_RENDER_INFO_MAX" value="4" enum="ViewportRenderInfo">
 			Represents the size of the [enum ViewportRenderInfo] enum.
 		</constant>
 		<constant name="VIEWPORT_RENDER_INFO_TYPE_VISIBLE" value="0" enum="ViewportRenderInfoType">
@@ -5746,10 +5863,13 @@
 		<constant name="INSTANCE_FOG_VOLUME" value="12" enum="InstanceType">
 			The instance is a fog volume.
 		</constant>
-		<constant name="INSTANCE_MAX" value="13" enum="InstanceType">
+		<constant name="INSTANCE_PORTAL" value="13" enum="InstanceType">
+			The instance is a portal.
+		</constant>
+		<constant name="INSTANCE_MAX" value="14" enum="InstanceType">
 			Represents the size of the [enum InstanceType] enum.
 		</constant>
-		<constant name="INSTANCE_GEOMETRY_MASK" value="14" enum="InstanceType">
+		<constant name="INSTANCE_GEOMETRY_MASK" value="15" enum="InstanceType">
 			A combination of the flags of geometry instances (mesh, multimesh, immediate and particles).
 		</constant>
 		<constant name="INSTANCE_FLAG_USE_BAKED_LIGHT" value="0" enum="InstanceFlags">
@@ -6004,31 +6124,34 @@
 		<constant name="RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME" value="1" enum="RenderingInfo">
 			Number of points, lines, or triangles rendered in the current 3D scene. This varies depending on camera position and rotation.
 		</constant>
-		<constant name="RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME" value="2" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_TOTAL_PORTALS_IN_FRAME" value="2" enum="RenderingInfo">
+			Number of portals rendered in the current 3D scene. This varies depending on camera position and rotation.
+		</constant>
+		<constant name="RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME" value="3" enum="RenderingInfo">
 			Number of draw calls performed to render in the current 3D scene. This varies depending on camera position and rotation.
 		</constant>
-		<constant name="RENDERING_INFO_TEXTURE_MEM_USED" value="3" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_TEXTURE_MEM_USED" value="4" enum="RenderingInfo">
 			Texture memory used (in bytes).
 		</constant>
-		<constant name="RENDERING_INFO_BUFFER_MEM_USED" value="4" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_BUFFER_MEM_USED" value="5" enum="RenderingInfo">
 			Buffer memory used (in bytes). This includes vertex data, uniform buffers, and many miscellaneous buffer types used internally.
 		</constant>
-		<constant name="RENDERING_INFO_VIDEO_MEM_USED" value="5" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_VIDEO_MEM_USED" value="6" enum="RenderingInfo">
 			Video memory used (in bytes). When using the Forward+ or Mobile renderers, this is always greater than the sum of [constant RENDERING_INFO_TEXTURE_MEM_USED] and [constant RENDERING_INFO_BUFFER_MEM_USED], since there is miscellaneous data not accounted for by those two metrics. When using the Compatibility renderer, this is equal to the sum of [constant RENDERING_INFO_TEXTURE_MEM_USED] and [constant RENDERING_INFO_BUFFER_MEM_USED].
 		</constant>
-		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS" value="6" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS" value="7" enum="RenderingInfo">
 			Number of pipeline compilations that were triggered by the 2D canvas renderer.
 		</constant>
-		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_MESH" value="7" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_MESH" value="8" enum="RenderingInfo">
 			Number of pipeline compilations that were triggered by loading meshes. These compilations will show up as longer loading times the first time a user runs the game and the pipeline is required.
 		</constant>
-		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_SURFACE" value="8" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_SURFACE" value="9" enum="RenderingInfo">
 			Number of pipeline compilations that were triggered by building the surface cache before rendering the scene. These compilations will show up as a stutter when loading a scene the first time a user runs the game and the pipeline is required.
 		</constant>
-		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW" value="9" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW" value="10" enum="RenderingInfo">
 			Number of pipeline compilations that were triggered while drawing the scene. These compilations will show up as stutters during gameplay the first time a user runs the game and the pipeline is required.
 		</constant>
-		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION" value="10" enum="RenderingInfo">
+		<constant name="RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION" value="11" enum="RenderingInfo">
 			Number of pipeline compilations that were triggered to optimize the current scene. These compilations are done in the background and should not cause any stutters whatsoever.
 		</constant>
 		<constant name="PIPELINE_SOURCE_CANVAS" value="0" enum="PipelineSource">
@@ -6070,6 +6193,24 @@
 		<constant name="FEATURE_SHADERS" value="0" enum="Features" deprecated="This constant has not been used since Godot 3.0.">
 		</constant>
 		<constant name="FEATURE_MULTITHREADED" value="1" enum="Features" deprecated="This constant has not been used since Godot 3.0.">
+		</constant>
+		<constant name="PORTAL_CULL_MASK_OP_KEEP" value="0" enum="PortalCullMaskOp">
+			The portal will use the cull mask used to cull itself to cull its own view. Equivalent to [constant Portal3D.CULL_MASK_OP_KEEP].
+		</constant>
+		<constant name="PORTAL_CULL_MASK_OP_REPLACE" value="1" enum="PortalCullMaskOp">
+			The portal will use its own defined cull mask to cull its own view. Equivalent to [constant Portal3D.CULL_MASK_OP_REPLACE].
+		</constant>
+		<constant name="PORTAL_CULL_MASK_OP_AND" value="2" enum="PortalCullMaskOp">
+			The portal will use the result of a bitwise-AND between the cull mask used to cull itself and its own defined cull mask to cull its own view.
+			Equivalent to [constant Portal3D.CULL_MASK_OP_AND].
+		</constant>
+		<constant name="PORTAL_CULL_MASK_OP_OR" value="3" enum="PortalCullMaskOp">
+			The portal will use the result of a bitwise-OR between the cull mask used to cull itself and its own defined cull mask to cull its own view.
+			Equivalent to [constant Portal3D.CULL_MASK_OP_OR].
+		</constant>
+		<constant name="PORTAL_CULL_MASK_OP_XOR" value="4" enum="PortalCullMaskOp">
+			The portal will use the result of a bitwise-XOR between the cull mask used to cull itself and its own defined cull mask to cull its own view.
+			Equivalent to [constant Portal3D.CULL_MASK_OP_XOR].
 		</constant>
 	</constants>
 </class>

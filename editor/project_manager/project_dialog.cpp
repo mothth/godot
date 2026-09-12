@@ -1135,15 +1135,17 @@ ProjectDialog::ProjectDialog() {
 	rs_button->set_button_group(renderer_button_group);
 	rs_button->set_text(TTRC("Mobile"));
 	rs_button->set_accessibility_name(TTRC("Renderer:"));
-#ifndef RD_ENABLED
+#if !defined(RD_ENABLED) || defined(MOBILE_RENDERER_DISABLED)
 	rs_button->set_disabled(true);
 #endif
 	rs_button->set_meta(SNAME("rendering_method"), "mobile");
 	rs_button->connect(SceneStringName(pressed), callable_mp(this, &ProjectDialog::_renderer_selected));
 	rvb->add_child(rs_button);
+#ifndef MOBILE_RENDERER_DISABLED
 	if (default_renderer_type == "mobile") {
 		rs_button->set_pressed(true);
 	}
+#endif
 	rs_button = memnew(CheckBox);
 	rs_button->set_button_group(renderer_button_group);
 	rs_button->set_text(TTRC("Compatibility"));

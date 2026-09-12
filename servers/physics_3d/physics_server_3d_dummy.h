@@ -423,6 +423,46 @@ public:
 	virtual void generic_6dof_joint_set_flag(RID p_joint, Vector3::Axis, G6DOFJointAxisFlag p_flag, bool p_enable) override {}
 	virtual bool generic_6dof_joint_get_flag(RID p_joint, Vector3::Axis, G6DOFJointAxisFlag p_flag) const override { return false; }
 
+	/* PORTAL API */
+
+	virtual RID portal_create() override { return RID(); }
+
+	virtual void portal_set_space(RID p_portal, RID p_space) override {}
+	virtual RID portal_get_space(RID p_portal) const override { return RID(); }
+	
+	virtual void portal_set_partner(RID p_portal, RID p_partner) override {}
+	virtual RID portal_get_partner(RID p_portal) const override { return RID(); }
+
+	virtual void portal_set_ghost_mode(RID p_portal, PortalGhostMode p_mode) override {}
+	virtual PortalGhostMode portal_get_ghost_mode(RID p_portal) const override { return PORTAL_GHOST_NONE; }
+
+	virtual void portal_set_collision_layer(RID p_portal, uint32_t p_layer) override {}
+	virtual uint32_t portal_get_collision_layer(RID p_portal) const override { return 0; }
+
+	virtual void portal_set_teleport_mask(RID p_portal, uint32_t p_mask) override {}
+	virtual uint32_t portal_get_teleport_mask(RID p_portal) const override { return 0; }
+
+	virtual void portal_attach_object_instance_id(RID p_portal, ObjectID p_id) override {}
+	virtual ObjectID portal_get_object_instance_id(RID p_portal) const override { return ObjectID(); }
+
+	virtual void portal_set_transform(RID p_portal, const Transform3D &p_transform) override {}
+	virtual Transform3D portal_get_transform(RID p_portal) const override { return Transform3D(); }
+
+	virtual void portal_set_shape_type(RID p_portal, PortalShapeType p_type) override {}
+	virtual PortalShapeType portal_get_shape_type(RID p_portal) const override { return PORTAL_SHAPE_RECTANGLE; }
+
+	virtual void portal_set_shape_data(RID p_portal, const Variant &p_data) override {}
+	virtual Variant portal_get_shape_data(RID p_portal) const override { return Variant(); }
+
+	virtual void portal_set_disabled(RID p_portal, bool p_disabled) override {}
+	virtual bool portal_is_disabled(RID p_portal) const override { return false; }
+
+	virtual void portal_set_monitor_callback(RID p_portal, const Callable &p_callback) override {};
+	virtual void portal_set_teleport_callback(RID p_portal, const Callable &p_callback) override {};
+
+	virtual void portal_set_param(RID p_portal, PortalParameter p_param, const Variant &p_value) override {};
+	virtual Variant portal_get_param(RID p_portal, PortalParameter p_param) const override { return Variant(); };
+
 	/* MISC */
 
 	virtual void free_rid(RID p_rid) override {}

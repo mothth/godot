@@ -62,6 +62,8 @@ public:
 			_ptr(p_lv.ptr()), _size(p_lv.size()) {}
 	VectorView(const LocalVector<T> &p_lv) :
 			_ptr(p_lv.ptr()), _size(p_lv.size()) {}
+	VectorView(const TightLocalVector<T> &p_lv) :
+			_ptr(p_lv.ptr()), _size(p_lv.size()) {}
 };
 
 class RenderingDeviceCommons : public Object {
@@ -712,6 +714,18 @@ public:
 		STENCIL_OP_MAX
 	};
 
+	enum StencilFace {
+		STENCIL_FACE_FRONT_BIT = 1,
+		STENCIL_FACE_BACK_BIT = 2,
+		STENCIL_FACE_FRONT_AND_BACK = 3
+	};
+
+	enum StencilMask {
+		STENCIL_MASK_ZERO = 0,
+		STENCIL_MASK_FULL = 0xFF,
+		STENCIL_MASK_DEFAULT = UINT32_MAX
+	};
+
 	enum LogicOperation {
 		LOGIC_OP_CLEAR,
 		LOGIC_OP_AND,
@@ -863,6 +877,10 @@ public:
 		DYNAMIC_STATE_STENCIL_COMPARE_MASK = (1 << 4),
 		DYNAMIC_STATE_STENCIL_WRITE_MASK = (1 << 5),
 		DYNAMIC_STATE_STENCIL_REFERENCE = (1 << 6),
+#ifdef EXTENDED_DYNAMIC_STATE
+		DYNAMIC_STATE_STENCIL_TEST = (1 << 7),
+		DYNAMIC_STATE_STENCIL_OP = (1 << 8)
+#endif // EXTENDED_DYNAMIC_STATE
 	};
 
 	/**************/

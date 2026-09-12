@@ -183,6 +183,7 @@ void Luminance::luminance_reduction(RID p_source_texture, const Size2i p_source_
 			RID shader = luminance_reduce_raster.shader.version_get_shader(luminance_reduce_raster.shader_version, mode);
 
 			RID framebuffer = FramebufferCacheRD::get_singleton()->get_cache(p_luminance_buffers->reduce[i]);
+			ERR_FAIL_COND(framebuffer.is_null());
 
 			RD::Uniform u_source_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, i == 0 ? p_source_texture : p_luminance_buffers->reduce[i - 1] }));
 

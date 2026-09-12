@@ -1722,7 +1722,7 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_VERTEX_BIT, VK_BUFFER_USAGE_V
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDIRECT_BIT, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
 
-RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn, uint32_t p_frames) {
 	uint32_t alignment = 16u; // 16 bytes is reasonable.
 	if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 		// Some GPUs (e.g. NVIDIA) have absurdly high alignments, like 256 bytes.
@@ -1732,14 +1732,19 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 		// This shouldn't be a problem since it's often <= 16 bytes. But do it just in case.
 		alignment = MAX(alignment, physical_device_properties.limits.minStorageBufferOffsetAlignment);
 	}
-	// Align the size. This is specially important for BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT buffers.
+	// Align the size. This is specially important for dynamic buffers.
 	// For the rest, it should work thanks to VMA taking care of the details. But still align just in case.
 	p_size = STEPIFY(p_size, alignment);
 
 	const size_t original_size = p_size;
-	if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
-		p_size = p_size * frame_count;
+	if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) && p_frames == 0) {
+		// Compatibility with original BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT behaviour
+		p_frames = frame_count;
 	}
+	if (p_frames > 0) {
+		p_size = p_size * p_frames;
+	}
+
 	VkBufferCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	create_info.size = p_size;
@@ -1807,25 +1812,29 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 
 	// Bookkeep.
 	BufferInfo *buf_info;
+	
 	if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 		void *persistent_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, allocation, &persistent_ptr);
 		ERR_FAIL_COND_V_MSG(err, BufferID(), "vmaMapMemory failed with error " + itos(err) + ".");
 
-		BufferDynamicInfo *dyn_buffer = VersatileResource::allocate<BufferDynamicInfo>(resources_allocator);
-		buf_info = dyn_buffer;
+		BufferPersistentInfo *persistent_buffer = VersatileResource::allocate<BufferPersistentInfo>(resources_allocator);
+		buf_info = persistent_buffer;
 #ifdef DEBUG_ENABLED
-		dyn_buffer->last_frame_mapped = p_frames_drawn - 1ul;
+		persistent_buffer->last_frame_mapped = p_frames_drawn - 1ul;
 #endif
-		dyn_buffer->frame_idx = 0u;
-		dyn_buffer->persistent_ptr = (uint8_t *)persistent_ptr;
+		persistent_buffer->persistent_ptr = (uint8_t *)persistent_ptr;
 	} else {
 		buf_info = VersatileResource::allocate<BufferInfo>(resources_allocator);
 	}
+
 	buf_info->vk_buffer = vk_buffer;
 	buf_info->allocation.handle = allocation;
 	buf_info->allocation.size = alloc_info.size;
 	buf_info->size = original_size;
+	buf_info->frame_idx = 0u;
+	buf_info->frames = p_frames;
+	buf_info->usage = p_usage;
 
 	return BufferID(buf_info);
 }
@@ -1853,7 +1862,7 @@ void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 		vkDestroyBufferView(vk_device, buf_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW));
 	}
 
-	if (buf_info->is_dynamic()) {
+	if (buf_info->is_persistent()) {
 		vmaUnmapMemory(allocator, buf_info->allocation.handle);
 	}
 
@@ -1864,8 +1873,8 @@ void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 		vmaFreeMemory(allocator, buf_info->allocation.handle);
 	}
 
-	if (buf_info->is_dynamic()) {
-		VersatileResource::free(resources_allocator, (BufferDynamicInfo *)buf_info);
+	if (buf_info->is_persistent()) {
+		VersatileResource::free(resources_allocator, (BufferPersistentInfo *)buf_info);
 	} else {
 		VersatileResource::free(resources_allocator, buf_info);
 	}
@@ -1876,9 +1885,14 @@ uint64_t RenderingDeviceDriverVulkan::buffer_get_allocation_size(BufferID p_buff
 	return buf_info->allocation.size;
 }
 
+uint64_t RenderingDeviceDriverVulkan::buffer_get_frame_size(BufferID p_buffer) {
+	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	return buf_info->size;
+}
+
 uint8_t *RenderingDeviceDriverVulkan::buffer_map(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
-	ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map_advance() instead.");
+	ERR_FAIL_COND_V_MSG(buf_info->is_persistent(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map() or buffer_persistent_map_advance() instead.");
 	void *data_ptr = nullptr;
 	VkResult err = vmaMapMemory(allocator, buf_info->allocation.handle, &data_ptr);
 	ERR_FAIL_COND_V_MSG(err, nullptr, "vmaMapMemory failed with error " + itos(err) + ".");
@@ -1891,35 +1905,36 @@ void RenderingDeviceDriverVulkan::buffer_unmap(BufferID p_buffer) {
 }
 
 uint8_t *RenderingDeviceDriverVulkan::buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) {
-	BufferDynamicInfo *buf_info = (BufferDynamicInfo *)p_buffer.id;
-	ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), nullptr, "Buffer must have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_map() instead.");
+	BufferPersistentInfo *buf_info = (BufferPersistentInfo *)p_buffer.id;
+	ERR_FAIL_COND_V_MSG(!buf_info->is_persistent(), nullptr, "Buffer must have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_map() instead.");
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V_MSG(buf_info->last_frame_mapped == p_frames_drawn, nullptr, "Buffers with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT must only be mapped once per frame. Otherwise there could be race conditions with the GPU. Amalgamate all data uploading into one map(), use an extra buffer or remove the bit.");
 	buf_info->last_frame_mapped = p_frames_drawn;
 #endif
-	buf_info->frame_idx = (buf_info->frame_idx + 1u) % frame_count;
+	buf_info->frame_idx = (buf_info->frame_idx + 1u) % buf_info->frames;
 	return buf_info->persistent_ptr + buf_info->frame_idx * buf_info->size;
 }
 
-uint64_t RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(Span<BufferID> p_buffers) {
-	uint64_t mask = 0u;
-	uint64_t shift = 0u;
+LocalVector<uint32_t> RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(Span<BufferID> p_buffers) {
+	// uint64_t mask = 0u;
+	// uint64_t shift = 0u;
+	LocalVector<uint32_t> result;
 
 	for (const BufferID &buf : p_buffers) {
 		const BufferInfo *buf_info = (const BufferInfo *)buf.id;
 		if (!buf_info->is_dynamic()) {
 			continue;
 		}
-		mask |= buf_info->frame_idx << shift;
-		// We can encode the frame index in 2 bits since frame_count won't be > 4.
-		shift += 2UL;
+		// mask |= buf_info->frame_idx << shift;
+		// shift += 8UL;
+		result.push_back(buf_info->frame_idx * buf_info->size);
 	}
 
-	return mask;
+	return result;
 }
 
 void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
-	BufferDynamicInfo *buf_info = (BufferDynamicInfo *)p_buffer.id;
+	BufferPersistentInfo *buf_info = (BufferPersistentInfo *)p_buffer.id;
 
 	VkMemoryPropertyFlags mem_props_flags;
 	vmaGetAllocationMemoryProperties(allocator, buf_info->allocation.handle, &mem_props_flags);
@@ -1927,7 +1942,7 @@ void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
 	const bool needs_flushing = !(mem_props_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	if (needs_flushing) {
-		if (buf_info->is_dynamic()) {
+		if (buf_info->is_persistent()) {
 			pending_flushes.allocations.push_back(buf_info->allocation.handle);
 			pending_flushes.offsets.push_back(buf_info->frame_idx * buf_info->size);
 			pending_flushes.sizes.push_back(buf_info->size);
@@ -4358,7 +4373,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
-				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
+				ERR_FAIL_COND_V_MSG(buf_info->is_persistent(), UniformSetID(),
 						"Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding (" + itos(uniform.binding) + "), set (" + itos(p_set_index) + ") is UNIFORM_TYPE_UNIFORM_BUFFER instead of UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC.");
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -4372,7 +4387,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-						"Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding (" + itos(uniform.binding) + "), set (" + itos(p_set_index) + ") is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.");
+						"Sent a buffer without dynamic elements but binding (" + itos(uniform.binding) + "), set (" + itos(p_set_index) + ") is UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC instead of UNIFORM_TYPE_UNIFORM_BUFFER.");
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
 						"Uniform set exceeded the limit of dynamic/persistent buffers. (" + itos(MAX_DYNAMIC_BUFFERS) + ").");
 
@@ -4387,7 +4402,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_buf_info->buffer = buf_info->vk_buffer;
 				vk_buf_info->range = buf_info->size;
 
-				ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), UniformSetID(),
+				ERR_FAIL_COND_V_MSG(buf_info->is_persistent(), UniformSetID(),
 						"Sent a buffer with BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding (" + itos(uniform.binding) + "), set (" + itos(p_set_index) + ") is UNIFORM_TYPE_STORAGE_BUFFER instead of UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC.");
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -4401,7 +4416,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_buf_info->range = buf_info->size;
 
 				ERR_FAIL_COND_V_MSG(!buf_info->is_dynamic(), UniformSetID(),
-						"Sent a buffer without BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT but binding (" + itos(uniform.binding) + "), set (" + itos(p_set_index) + ") is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.");
+						"Sent a buffer without dynamic elements but binding (" + itos(uniform.binding) + "), set (" + itos(p_set_index) + ") is UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC instead of UNIFORM_TYPE_STORAGE_BUFFER.");
 				ERR_FAIL_COND_V_MSG(num_dynamic_buffers >= MAX_DYNAMIC_BUFFERS, UniformSetID(),
 						"Uniform set exceeded the limit of dynamic/persistent buffers. (" + itos(MAX_DYNAMIC_BUFFERS) + ").");
 
@@ -4531,9 +4546,11 @@ bool RenderingDeviceDriverVulkan::uniform_sets_have_linear_pools() const {
 	return true;
 }
 
-uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const {
-	uint32_t mask = 0u;
-	uint32_t shift = 0u;
+LocalVector<uint32_t> RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, VectorView<int> p_dynamic_frames) const {
+	// uint64_t mask = 0uL;
+	// uint32_t shift = 0u;
+	uint32_t count = 0;
+	LocalVector<uint32_t> result;
 #ifdef DEV_ENABLED
 	uint32_t curr_dynamic_offset = 0u;
 #endif
@@ -4543,17 +4560,19 @@ uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorVie
 		// At this point this assert should already have been validated.
 		DEV_ASSERT(curr_dynamic_offset + usi->dynamic_buffers.size() <= MAX_DYNAMIC_BUFFERS);
 
-		for (const BufferInfo *dynamic_buffer : usi->dynamic_buffers) {
-			DEV_ASSERT(dynamic_buffer->frame_idx < 16u);
-			mask |= dynamic_buffer->frame_idx << shift;
-			shift += 4u;
+		for (auto &buf_info : usi->dynamic_buffers) {
+			if (count < p_dynamic_frames.size() && p_dynamic_frames[count] >= 0) {
+				result.push_back(p_dynamic_frames[count++] * buf_info->size);
+			} else {
+				result.push_back(buf_info->frame_idx * buf_info->size);
+			}
 		}
 #ifdef DEV_ENABLED
 		curr_dynamic_offset += usi->dynamic_buffers.size();
 #endif
 	}
 
-	return mask;
+	return result;
 }
 
 void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_pool_index) {
@@ -5227,7 +5246,7 @@ void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p
 	vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
 }
 
-void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, VectorView<uint32_t> p_dynamic_offsets) {
 	if (p_set_count == 0) {
 		return;
 	}
@@ -5236,29 +5255,32 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 	sets.clear();
 	sets.resize(p_set_count);
 
-	uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
-	uint32_t shift = 0u;
-	uint32_t curr_dynamic_offset = 0u;
+	// uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
+	// uint32_t shift = 0u;
+	// uint32_t curr_dynamic_offset = 0u;
 
 	for (uint32_t i = 0; i < p_set_count; i++) {
 		const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_sets[i].id;
 
 		sets[i] = usi->vk_descriptor_set;
 
+		/*
 		// At this point this assert should already have been validated.
 		DEV_ASSERT(curr_dynamic_offset + usi->dynamic_buffers.size() <= MAX_DYNAMIC_BUFFERS);
 
 		const uint32_t dynamic_offset_count = usi->dynamic_buffers.size();
 		for (uint32_t j = 0u; j < dynamic_offset_count; ++j) {
-			const uint32_t frame_idx = (p_dynamic_offsets >> shift) & 0xFu;
-			shift += 4u;
-			dynamic_offsets[curr_dynamic_offset++] = uint32_t(frame_idx * usi->dynamic_buffers[j]->size);
+			// const uint64_t frame_idx = (p_dynamic_offsets >> shift) & 0xFFUL;
+			// shift += 8u;
+			// dynamic_offsets[curr_dynamic_offset++] = uint32_t(frame_idx * usi->dynamic_buffers[j]->size);
+			dynamic_offsets[curr_dynamic_offset++] = usi->dynamic_buffers[j].frame_idx;
 		}
+		*/
 	}
 
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
-	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
+	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], p_dynamic_offsets.size(), p_dynamic_offsets.ptr());
 }
 
 void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
@@ -5297,17 +5319,18 @@ void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBuff
 	vkCmdDrawIndirectCount(command_buffer->vk_command_buffer, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
 }
 
-void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) {
+void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, VectorView<uint32_t> p_dynamic_offsets) {
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	uint64_t *vk_offsets = ALLOCA_ARRAY(uint64_t, p_binding_count);
 	for (uint32_t i = 0; i < p_binding_count; i++) {
 		const BufferInfo *buf_info = (const BufferInfo *)p_buffers[i].id;
 		uint64_t offset = p_offsets[i];
-		if (buf_info->is_dynamic()) {
-			uint64_t frame_idx = p_dynamic_offsets & 0x3; // Assuming max 4 frames.
-			p_dynamic_offsets >>= 2;
-			offset += frame_idx * buf_info->size;
+		if (buf_info->is_dynamic() && i < p_dynamic_offsets.size()) {
+			// uint64_t frame_idx = p_dynamic_offsets & 0x3; // Assuming max 4 frames.
+			// p_dynamic_offsets >>= 2;
+			// offset += frame_idx * buf_info->size;
+			offset += p_dynamic_offsets[i];
 		}
 		vk_buffers[i] = ((const BufferInfo *)p_buffers[i].id)->vk_buffer;
 		vk_offsets[i] = offset;
@@ -5330,6 +5353,27 @@ void RenderingDeviceDriverVulkan::command_render_set_line_width(CommandBufferID 
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdSetLineWidth(command_buffer->vk_command_buffer, p_width);
 }
+
+void RenderingDeviceDriverVulkan::command_render_set_stencil_masks(CommandBufferID p_cmd_buffer, RDD::StencilFace p_face_mask, uint32_t p_reference, uint32_t p_compare_mask, uint32_t p_write_mask) {
+	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	if (p_reference != RDD::STENCIL_MASK_DEFAULT) { vkCmdSetStencilReference(command_buffer->vk_command_buffer, p_face_mask, p_reference); }
+	if (p_compare_mask != RDD::STENCIL_MASK_DEFAULT) { vkCmdSetStencilCompareMask(command_buffer->vk_command_buffer, p_face_mask, p_compare_mask); }
+	if (p_write_mask != RDD::STENCIL_MASK_DEFAULT) { vkCmdSetStencilWriteMask(command_buffer->vk_command_buffer, p_face_mask, p_write_mask); }
+}
+
+#ifdef EXTENDED_DYNAMIC_STATE
+
+void RenderingDeviceDriverVulkan::command_render_set_stencil_enabled(CommandBufferID p_cmd_buffer, bool p_enabled) {
+	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	vkCmdSetStencilTestEnable(command_buffer->vk_command_buffer, p_enabled);
+}
+
+void RenderingDeviceDriverVulkan::command_render_set_stencil_operators(CommandBufferID p_cmd_buffer, RDD::StencilFace p_face_mask, RDD::StencilOperation p_fail, RDD::StencilOperation p_pass, RDD::StencilOperation p_depth_fail, RDD::CompareOperator p_compare) {
+	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
+	vkCmdSetStencilOp(command_buffer->vk_command_buffer, p_face_mask, (VkStencilOp)p_fail, (VkStencilOp)p_pass, (VkStencilOp)p_depth_fail, (VkCompareOp)p_compare);
+}
+
+#endif // EXTENDED_DYNAMIC_STATE
 
 // ----- PIPELINE -----
 
@@ -5361,6 +5405,11 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_OP_DECREMENT_AND_CLAMP, VK_STENCIL
 static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_OP_INVERT, VK_STENCIL_OP_INVERT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_OP_INCREMENT_AND_WRAP, VK_STENCIL_OP_INCREMENT_AND_WRAP));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_OP_DECREMENT_AND_WRAP, VK_STENCIL_OP_DECREMENT_AND_WRAP));
+
+// RDD::StencilFace == VkStencilFaceFlagBits.
+static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_FACE_FRONT_BIT, VK_STENCIL_FACE_FRONT_BIT));
+static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_FACE_BACK_BIT, VK_STENCIL_FACE_BACK_BIT));
+static_assert(ENUM_MEMBERS_EQUAL(RDD::STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_FACE_FRONT_AND_BACK));
 
 // RDD::LogicOperation == VkLogicOp.
 static_assert(ENUM_MEMBERS_EQUAL(RDD::LOGIC_OP_CLEAR, VK_LOGIC_OP_CLEAR));
@@ -5595,6 +5644,20 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
 		vk_dynamic_states_count++;
 	}
+
+#ifdef EXTENDED_DYNAMIC_STATE
+
+	if (p_dynamic_state.has_flag(DYNAMIC_STATE_STENCIL_TEST)) {
+		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE;
+		vk_dynamic_states_count++;
+	}
+	if (p_dynamic_state.has_flag(DYNAMIC_STATE_STENCIL_OP)) {
+		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_STENCIL_OP;
+		vk_dynamic_states_count++;
+	}
+	
+#endif // EXTENDED_DYNAMIC_STATE
+
 	DEV_ASSERT(vk_dynamic_states_count <= MAX_DYN_STATE_COUNT);
 
 	dynamic_state_create_info.dynamicStateCount = vk_dynamic_states_count;
@@ -5797,7 +5860,7 @@ void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID 
 	vkCmdBindPipeline(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, (VkPipeline)p_pipeline.id);
 }
 
-void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, VectorView<uint32_t> p_dynamic_offsets) {
 	if (p_set_count == 0) {
 		return;
 	}
@@ -5806,29 +5869,31 @@ void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBuffe
 	sets.clear();
 	sets.resize(p_set_count);
 
-	uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
-	uint32_t shift = 0u;
-	uint32_t curr_dynamic_offset = 0u;
+	// uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
+	// uint32_t shift = 0u;
+	// uint32_t curr_dynamic_offset = 0u;
 
 	for (uint32_t i = 0; i < p_set_count; i++) {
 		const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_sets[i].id;
 
 		sets[i] = usi->vk_descriptor_set;
 
+		/*
 		// At this point this assert should already have been validated.
 		DEV_ASSERT(curr_dynamic_offset + usi->dynamic_buffers.size() <= MAX_DYNAMIC_BUFFERS);
 
 		const uint32_t dynamic_offset_count = usi->dynamic_buffers.size();
 		for (uint32_t j = 0u; j < dynamic_offset_count; ++j) {
-			const uint32_t frame_idx = (p_dynamic_offsets >> shift) & 0xFu;
-			shift += 4u;
+			const uint64_t frame_idx = (p_dynamic_offsets >> shift) & 0xFFu;
+			shift += 8u;
 			dynamic_offsets[curr_dynamic_offset++] = uint32_t(frame_idx * usi->dynamic_buffers[j]->size);
 		}
+		*/
 	}
 
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
-	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], curr_dynamic_offset, dynamic_offsets);
+	vkCmdBindDescriptorSets(command_buffer->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], p_dynamic_offsets.size(), p_dynamic_offsets.ptr());
 }
 
 void RenderingDeviceDriverVulkan::command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {

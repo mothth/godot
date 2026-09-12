@@ -1115,6 +1115,7 @@ public:
 	enum ViewportRenderInfo {
 		VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME,
 		VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME,
+		VIEWPORT_RENDER_INFO_PORTALS_IN_FRAME,
 		VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME,
 		VIEWPORT_RENDER_INFO_MAX,
 	};
@@ -1449,6 +1450,7 @@ public:
 		INSTANCE_OCCLUDER,
 		INSTANCE_VISIBLITY_NOTIFIER, // TODO: Fix typo in "VISIBILITY" (in 5.0).
 		INSTANCE_FOG_VOLUME,
+		INSTANCE_PORTAL,
 		INSTANCE_MAX,
 
 		INSTANCE_GEOMETRY_MASK = (1 << INSTANCE_MESH) | (1 << INSTANCE_MULTIMESH) | (1 << INSTANCE_PARTICLES)
@@ -1730,6 +1732,29 @@ public:
 	Rect2 debug_canvas_item_get_rect(RID p_item);
 	virtual Rect2 _debug_canvas_item_get_rect(RID p_item) = 0;
 
+	/* PORTALS */
+
+	enum PortalCullMaskOp {
+		PORTAL_CULL_MASK_OP_KEEP,
+		PORTAL_CULL_MASK_OP_REPLACE,
+		PORTAL_CULL_MASK_OP_AND,
+		PORTAL_CULL_MASK_OP_OR,
+		PORTAL_CULL_MASK_OP_XOR,
+		NUM_PORTAL_CULL_MASK_OPS
+	};
+
+	virtual RID portal_create() = 0;
+	virtual void portal_set_double_sided(RID p_portal, bool p_double_sided) = 0;
+	virtual void portal_set_teleport_light(RID p_portal, bool p_teleport_light) = 0;
+	virtual void portal_set_teleport_gi(RID p_portal, bool p_teleport_gi) = 0;
+	virtual void portal_set_mesh(RID p_portal, RID p_mesh) = 0;
+	virtual void portal_set_destination_transform(RID p_portal, const Transform3D &p_transform) = 0;
+	virtual void portal_set_scenario_override(RID p_portal, RID p_scenario) = 0;
+	virtual void portal_set_environment_override(RID p_portal, RID p_environment) = 0;
+	virtual void portal_set_recursive_depth(RID p_portal, int p_depth) = 0;
+	virtual void portal_set_cull_mask(RID p_portal, PortalCullMaskOp p_op, uint32_t p_mask = 0xFFFFFFFF) = 0;
+	virtual void portal_set_cull_partner(RID p_portal, RID p_partner) = 0;
+
 	/* GLOBAL SHADER UNIFORMS */
 
 	enum GlobalShaderParameterType {
@@ -1810,6 +1835,7 @@ public:
 	enum RenderingInfo {
 		RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME,
 		RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME,
+		RENDERING_INFO_TOTAL_PORTALS_IN_FRAME,
 		RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME,
 		RENDERING_INFO_TEXTURE_MEM_USED,
 		RENDERING_INFO_BUFFER_MEM_USED,
@@ -2029,6 +2055,7 @@ VARIANT_ENUM_CAST(RenderingServer::RenderingInfo);
 VARIANT_ENUM_CAST(RenderingServer::SplashStretchMode);
 VARIANT_ENUM_CAST(RenderingServer::CanvasTextureChannel);
 VARIANT_ENUM_CAST(RenderingServer::BakeChannels);
+VARIANT_ENUM_CAST(RenderingServer::PortalCullMaskOp);
 
 #ifndef DISABLE_DEPRECATED
 VARIANT_ENUM_CAST(RenderingServer::Features);

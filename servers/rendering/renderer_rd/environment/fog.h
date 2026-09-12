@@ -40,6 +40,7 @@
 #include "servers/rendering/renderer_rd/shaders/environment/volumetric_fog_process.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_buffer_custom_data_rd.h"
 #include "servers/rendering/storage/utilities.h"
+#include "servers/rendering/renderer_rd/layout_rules.h"
 
 #define RB_SCOPE_FOG SNAME("Fog")
 
@@ -148,32 +149,40 @@ private:
 		};
 
 		struct ParamsUBO {
-			float fog_frustum_size_begin[2];
-			float fog_frustum_size_end[2];
+			std140_vec2 fog_frustum_size_begin;
+			std140_vec2 fog_frustum_size_end;
 
 			float fog_frustum_end;
 			float ambient_inject;
 			float z_far;
 			uint32_t filter_axis;
 
-			float ambient_color[3];
-			float sky_contribution;
+			union {
+				std140_vec3 ambient_color;
+				std140_vec3_trail sky_contribution;
+			};
 
-			int32_t fog_volume_size[3];
-			uint32_t directional_light_count;
+			union {
+				std140_ivec3 fog_volume_size;
+				std140_ivec3_trail directional_light_count;
+			};
 
-			float base_emission[3];
-			float base_density;
+			union {
+				std140_vec3 base_emission;
+				std140_vec3_trail base_density;
+			};
 
-			float base_scattering[3];
-			float phase_g;
+			union {
+				std140_vec3 base_scattering;
+				std140_vec3_trail phase_g;
+			};
 
 			float detail_spread;
 			float gi_inject;
 			uint32_t max_voxel_gi_instances;
 			uint32_t cluster_type_size;
 
-			float screen_size[2];
+			std140_vec2 screen_size;
 			uint32_t cluster_shift;
 			uint32_t cluster_width;
 
@@ -182,12 +191,16 @@ private:
 			uint32_t temporal_frame;
 			float temporal_blend;
 
-			float sky_border_size[2];
-			float pad[2];
+			std140_vec2 sky_border_size;
+			
+			uint32_t camera_index;
+			uint32_t camera_count;
 
-			float cam_rotation[12];
-			float to_prev_view[16];
-			float radiance_inverse_xform[12];
+			std140_mat3x4 view_matrix;
+			std140_mat3x4 inv_view_matrix;
+	
+			std140_mat4 to_prev_view;
+			std140_mat3 radiance_inverse_xform;
 		};
 
 		VolumetricFogProcessShaderRD process_shader;

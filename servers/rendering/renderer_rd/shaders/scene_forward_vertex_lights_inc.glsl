@@ -47,9 +47,11 @@ half get_omni_attenuation(float distance, float inv_range, float decay) {
 	return half(nd * pow(max(distance, 0.0001), -decay));
 }
 
-void light_process_omni_vertex(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, half roughness,
+void light_process_omni_vertex(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, half roughness, mat4 view_matrix
 		inout hvec3 diffuse_light, inout hvec3 specular_light) {
-	vec3 light_rel_vec = omni_lights.data[idx].position - vertex;
+		
+	vec3 position = (view_matrix * vec4(omni_lights.data[idx].position, 1.0)).xyz;
+	vec3 light_rel_vec = position - vertex;
 	float light_length = length(light_rel_vec);
 	hvec3 light_rel_vec_norm = hvec3(light_rel_vec / light_length);
 	half omni_attenuation = get_omni_attenuation(light_length, omni_lights.data[idx].inv_radius, omni_lights.data[idx].attenuation);
@@ -60,14 +62,18 @@ void light_process_omni_vertex(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 norma
 			specular_light);
 }
 
-void light_process_spot_vertex(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, half roughness,
+void light_process_spot_vertex(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, half roughness, mat4 view_matrix,
 		inout hvec3 diffuse_light,
 		inout hvec3 specular_light) {
-	vec3 light_rel_vec = spot_lights.data[idx].position - vertex;
+
+	vec3 position = (view_matrix * vec4(spot_lights.data[idx].position, 1.0)).xyz;
+	vec3 light_rel_vec = position - vertex;
 	float light_length = length(light_rel_vec);
 	hvec3 light_rel_vec_norm = hvec3(light_rel_vec / light_length);
 	half spot_attenuation = get_omni_attenuation(light_length, spot_lights.data[idx].inv_radius, spot_lights.data[idx].attenuation);
-	hvec3 spot_dir = hvec3(spot_lights.data[idx].direction);
+
+	vec3 direction = (view_matrix * vec4(spot_lights.data[idx].direction, 1.0)).xyz;
+	hvec3 spot_dir = hvec3(direction);
 
 	half cone_angle = half(spot_lights.data[idx].cone_angle);
 	half scos = max(dot(-light_rel_vec_norm, spot_dir), cone_angle);

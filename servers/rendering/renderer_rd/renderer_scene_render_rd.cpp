@@ -380,6 +380,7 @@ void RendererSceneRenderRD::_render_buffers_copy_screen_texture(const RenderData
 			copy_effects->copy_to_rect(texture, dest, Rect2i(0, 0, size.x, size.y));
 		} else {
 			RID fb = FramebufferCacheRD::get_singleton()->get_cache(dest);
+			ERR_FAIL_COND(fb.is_null());
 			copy_effects->copy_to_fb_rect(texture, fb, Rect2i(0, 0, size.x, size.y));
 		}
 
@@ -416,7 +417,7 @@ void RendererSceneRenderRD::_render_buffers_ensure_depth_texture(const RenderDat
 	rb->create_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH, RD::DATA_FORMAT_R32_SFLOAT, usage_bits, RD::TEXTURE_SAMPLES_1);
 }
 
-void RendererSceneRenderRD::_render_buffers_copy_depth_texture(const RenderDataRD *p_render_data, bool p_use_msaa) {
+void RendererSceneRenderRD::_render_buffers_copy_depth_texture(const RenderDataRD *p_render_data, bool p_use_msaa, bool p_remap_portal_depth) {
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	ERR_FAIL_COND(rb.is_null());
 
@@ -437,6 +438,7 @@ void RendererSceneRenderRD::_render_buffers_copy_depth_texture(const RenderDataR
 			copy_effects->copy_to_rect(depth_texture, depth_back_texture, Rect2i(0, 0, size.x, size.y));
 		} else {
 			RID depth_back_fb = FramebufferCacheRD::get_singleton()->get_cache(depth_back_texture);
+			ERR_FAIL_COND(depth_back_fb.is_null());
 			if (p_use_msaa) {
 				static const int texture_multisamples[RS::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
@@ -515,9 +517,9 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 				buffers.depth_texture = rb->get_depth_texture(i);
 
 				// In stereo p_render_data->z_near and p_render_data->z_far can be offset for our combined frustum.
-				float z_near = p_render_data->scene_data->view_projection[i].get_z_near();
-				float z_far = p_render_data->scene_data->view_projection[i].get_z_far();
-				bokeh_dof->bokeh_dof_compute(buffers, p_render_data->camera_attributes, z_near, z_far, p_render_data->scene_data->cam_orthogonal);
+				float z_near = p_render_data->scene_data->get_camera_view_projection(0, i).get_z_near();
+				float z_far = p_render_data->scene_data->get_camera_view_projection(0, i).get_z_far();
+				bokeh_dof->bokeh_dof_compute(buffers, p_render_data->camera_attributes, z_near, z_far, p_render_data->scene_data->first_camera().cam_orthogonal);
 			};
 		} else {
 			// Set framebuffers.
@@ -536,11 +538,12 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 				buffers.base_texture = use_upscaled_texture ? rb->get_upscaled_texture(i) : rb->get_internal_texture(i);
 				buffers.depth_texture = p_use_msaa ? rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH, i, 0) : rb->get_depth_texture(i);
 				buffers.base_fb = FramebufferCacheRD::get_singleton()->get_cache(buffers.base_texture); // TODO move this into bokeh_dof_raster, we can do this internally
+				ERR_FAIL_COND(buffers.base_fb.is_null());
 
 				// In stereo p_render_data->z_near and p_render_data->z_far can be offset for our combined frustum.
-				float z_near = p_render_data->scene_data->view_projection[i].get_z_near();
-				float z_far = p_render_data->scene_data->view_projection[i].get_z_far();
-				bokeh_dof->bokeh_dof_raster(buffers, p_render_data->camera_attributes, z_near, z_far, p_render_data->scene_data->cam_orthogonal);
+				float z_near = p_render_data->scene_data->get_camera_view_projection(0, i).get_z_near();
+				float z_far = p_render_data->scene_data->get_camera_view_projection(0, i).get_z_far();
+				bokeh_dof->bokeh_dof_raster(buffers, p_render_data->camera_attributes, z_near, z_far, p_render_data->scene_data->first_camera().cam_orthogonal);
 			}
 		}
 		RD::get_singleton()->draw_command_end_label();
@@ -765,7 +768,8 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			// Note that this is cached so we only create the texture the first time.
 			dest_fb_format = rb->get_base_data_format();
 			RID dest_texture = rb->create_texture(SNAME("Tonemapper"), SNAME("destination"), dest_fb_format, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT, RD::TEXTURE_SAMPLES_1, Size2i(), 0, 1, true, true);
-			dest_fb = FramebufferCacheRD::get_singleton()->get_cache(dest_texture);
+			dest_fb = FramebufferCacheRD::get_singleton()->get_cache_multiview(rb->get_view_count(), dest_texture);
+			ERR_FAIL_COND(dest_fb.is_null());
 			tonemap.dest_texture_size = rb->get_internal_size();
 		} else {
 			// If we do a bilinear upscale we just render into our render target and our shader will upscale automatically.
@@ -774,6 +778,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 
 			if (dest_is_msaa_2d) {
 				dest_fb = FramebufferCacheRD::get_singleton()->get_cache(texture_storage->render_target_get_rd_texture_msaa(render_target));
+				ERR_FAIL_COND(dest_fb.is_null());
 				texture_storage->render_target_set_msaa_needs_resolve(render_target, true); // Make sure this gets resolved.
 			} else {
 				dest_fb = texture_storage->render_target_get_rd_framebuffer(render_target);
@@ -827,6 +832,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 					dest_texture = texture_storage->render_target_get_rd_texture_slice(render_target, v);
 				}
 				dest_fb = FramebufferCacheRD::get_singleton()->get_cache(dest_texture);
+				ERR_FAIL_COND(dest_fb.is_null());
 
 				smaa->process(rb, source_texture, dest_fb, rb->get_use_debanding() && !using_hdr);
 			}
@@ -836,9 +842,11 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			if (spatial_upscaler) {
 				RID dest_texture = rb->create_texture(SNAME("SMAA"), SNAME("destination"), rb->get_base_data_format(), RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT, RD::TEXTURE_SAMPLES_1, Size2i(), 0, 1, true, true);
 				dest_fb = FramebufferCacheRD::get_singleton()->get_cache(dest_texture);
+				ERR_FAIL_COND(dest_fb.is_null());
 			} else {
 				if (dest_is_msaa_2d) {
 					dest_fb = FramebufferCacheRD::get_singleton()->get_cache(texture_storage->render_target_get_rd_texture_msaa(render_target));
+					ERR_FAIL_COND(dest_fb.is_null());
 					texture_storage->render_target_set_msaa_needs_resolve(render_target, true); // Make sure this gets resolved.
 				} else {
 					dest_fb = texture_storage->render_target_get_rd_framebuffer(render_target);
@@ -872,6 +880,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			// We can't upscale directly into our MSAA buffer so we need to do a copy
 			RID source_texture = texture_storage->render_target_get_rd_texture(render_target);
 			RID dest_fb = FramebufferCacheRD::get_singleton()->get_cache(texture_storage->render_target_get_rd_texture_msaa(render_target));
+			ERR_FAIL_COND(dest_fb.is_null());
 			copy_effects->copy_to_fb_rect(source_texture, dest_fb, Rect2i(Point2i(), rb->get_target_size()));
 
 			texture_storage->render_target_set_msaa_needs_resolve(render_target, true); // Make sure this gets resolved.
@@ -1069,7 +1078,7 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 				RID base = light_storage->light_instance_get_base_light(light);
 
 				if (light_storage->light_get_type(base) == RS::LIGHT_DIRECTIONAL) {
-					debug_effects->draw_shadow_frustum(light, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, dest_fb, Rect2(Size2(), size));
+					debug_effects->draw_shadow_frustum(light, p_render_data->scene_data->first_camera().cam_projection, p_render_data->scene_data->first_camera().cam_transform, dest_fb, Rect2(Size2(), size));
 				}
 			}
 		}
@@ -1117,7 +1126,7 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 		RID dest_fb = texture_storage->render_target_get_rd_framebuffer(render_target);
 		Size2i resolution = rb->get_internal_size();
 
-		debug_effects->draw_motion_vectors(velocity, depth, dest_fb, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform, resolution);
+		debug_effects->draw_motion_vectors(velocity, depth, dest_fb, p_render_data->scene_data->first_camera().cam_projection, p_render_data->scene_data->first_camera().cam_transform, p_render_data->scene_data->first_camera().prev_cam_projection, p_render_data->scene_data->first_camera().prev_cam_transform, resolution);
 	}
 }
 
@@ -1324,93 +1333,47 @@ void RendererSceneRenderRD::_post_prepass_render(RenderDataRD *p_render_data, bo
 	}
 }
 
-void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneRenderRD::render_scene(
+	const Ref<RenderSceneBuffers> &p_render_buffers,
+	const CameraData *p_camera_data,
+	const CameraData *p_prev_camera_data,
+	const PagedArray<RenderGeometryInstance *> &p_instances,
+	const PagedArray<RID> &p_lights,
+	const PagedArray<RID> &p_reflection_probes,
+	const PagedArray<RID> &p_voxel_gi_instances,
+	const PagedArray<RID> &p_decals,
+	const PagedArray<RID> &p_lightmaps,
+	const PagedArray<RID> &p_fog_volumes,
+	RID p_environment,
+	RID p_camera_attributes,
+	RID p_compositor,
+	RID p_shadow_atlas,
+	RID p_occluder_debug_tex,
+	RID p_reflection_atlas,
+	RID p_reflection_probe,
+	int p_reflection_probe_pass,
+	float p_screen_mesh_lod_threshold,
+	const RenderShadowData *p_render_shadows,
+	int p_render_shadow_count,
+	const RenderSDFGIData *p_render_sdfgi_regions,
+	int p_render_sdfgi_region_count,
+	const RenderSDFGIUpdateData *p_sdfgi_update_data,
+	RenderingMethod::RenderInfo *r_render_info,
+	Span<PortalRenderInfo> p_portal_info) 
+{
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+	RendererRD::PortalStorage *portal_storage = RendererRD::PortalStorage::get_singleton();
 
 	// getting this here now so we can direct call a bunch of things more easily
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	Ref<RenderSceneBuffersRD> rb = p_render_buffers;
 	ERR_FAIL_COND(rb.is_null());
 
-	// setup scene data
+	RenderDataRD render_data;
 	RenderSceneDataRD scene_data;
-	{
-		// Our first camera is used by default
-		scene_data.cam_transform = p_camera_data->main_transform;
-		scene_data.cam_projection = p_camera_data->main_projection;
-		scene_data.cam_orthogonal = p_camera_data->is_orthogonal;
-		scene_data.cam_frustum = p_camera_data->is_frustum;
-		scene_data.camera_visible_layers = p_camera_data->visible_layers;
-		scene_data.taa_jitter = p_camera_data->taa_jitter;
-		scene_data.taa_frame_count = p_camera_data->taa_frame_count;
-		scene_data.main_cam_transform = p_camera_data->main_transform;
-		scene_data.flip_y = !p_reflection_probe.is_valid();
-
-		scene_data.view_count = p_camera_data->view_count;
-		for (uint32_t v = 0; v < p_camera_data->view_count; v++) {
-			scene_data.view_eye_offset[v] = p_camera_data->view_offset[v].origin;
-			scene_data.view_projection[v] = p_camera_data->view_projection[v];
-		}
-
-		scene_data.prev_cam_transform = p_prev_camera_data->main_transform;
-		scene_data.prev_cam_projection = p_prev_camera_data->main_projection;
-		scene_data.prev_taa_jitter = p_prev_camera_data->taa_jitter;
-
-		for (uint32_t v = 0; v < p_camera_data->view_count; v++) {
-			scene_data.prev_view_projection[v] = p_prev_camera_data->view_projection[v];
-		}
-
-		scene_data.z_near = p_camera_data->main_projection.get_z_near();
-		scene_data.z_far = p_camera_data->main_projection.get_z_far();
-
-		// this should be the same for all cameras..
-		const float lod_distance_multiplier = p_camera_data->main_projection.get_lod_multiplier();
-
-		// Also, take into account resolution scaling for the multiplier, since we have more leeway with quality
-		// degradation visibility. Conversely, allow upwards scaling, too, for increased mesh detail at high res.
-		const float scaling_3d_scale = GLOBAL_GET_CACHED(float, "rendering/scaling_3d/scale");
-		scene_data.lod_distance_multiplier = lod_distance_multiplier * (1.0 / scaling_3d_scale);
-
-		if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD) {
-			scene_data.screen_mesh_lod_threshold = 0.0;
-		} else {
-			scene_data.screen_mesh_lod_threshold = p_screen_mesh_lod_threshold;
-		}
-
-		if (p_shadow_atlas.is_valid()) {
-			int shadow_atlas_size = light_storage->shadow_atlas_get_size(p_shadow_atlas);
-			scene_data.shadow_atlas_pixel_size.x = 1.0 / shadow_atlas_size;
-			scene_data.shadow_atlas_pixel_size.y = 1.0 / shadow_atlas_size;
-		}
-		{
-			int directional_shadow_size = light_storage->directional_shadow_get_size();
-			scene_data.directional_shadow_pixel_size.x = 1.0 / directional_shadow_size;
-			scene_data.directional_shadow_pixel_size.y = 1.0 / directional_shadow_size;
-		}
-
-		if (p_environment.is_valid()) {
-			RID sky_rid = environment_get_sky(p_environment);
-			if (sky_rid.is_valid()) {
-				int radiance_size = sky.sky_get_radiance_size(sky_rid);
-				scene_data.radiance_pixel_size = 1.0f / radiance_size;
-				float uv_border_size = sky.sky_get_uv_border_size(sky_rid);
-				scene_data.radiance_border_size = uv_border_size;
-			}
-		}
-
-		if (p_reflection_atlas.is_valid()) {
-			float border_size = light_storage->reflection_atlas_get_border_size(p_reflection_atlas);
-			scene_data.reflection_atlas_border_size.x = border_size;
-			scene_data.reflection_atlas_border_size.y = 1.0f - border_size * 2.0;
-		}
-
-		scene_data.time = time;
-		scene_data.time_step = time_step;
-	}
 
 	//assign render data
-	RenderDataRD render_data;
 	{
 		render_data.render_buffers = rb;
 		render_data.scene_data = &scene_data;
@@ -1438,10 +1401,136 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.sdfgi_update_data = p_sdfgi_update_data;
 
 		render_data.render_info = r_render_info;
+		render_data.portal_info = p_portal_info;
 
 		if (p_render_buffers.is_valid() && p_reflection_probe.is_null()) {
 			render_data.transparent_bg = texture_storage->render_target_get_transparent(rb->get_render_target());
 			render_data.render_region = texture_storage->render_target_get_render_region(rb->get_render_target());
+		}
+	}
+
+	// Check if we need motion vectors
+
+	bool using_debug_mvs = get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS;
+	bool using_taa = rb->get_use_taa();
+	bool ce_needs_motion_vectors = _compositor_effects_has_flag(&render_data, RS::COMPOSITOR_EFFECT_FLAG_NEEDS_MOTION_VECTORS);
+	bool using_upscaling = rb->get_scaling_3d_mode() != RS::VIEWPORT_SCALING_3D_MODE_OFF;
+	bool is_reflection_probe = p_reflection_probe.is_valid();
+
+	bool motion_vectors_required;
+	if (using_debug_mvs || ce_needs_motion_vectors) {
+		motion_vectors_required = true;
+	} else if (!is_reflection_probe && using_taa) {
+		motion_vectors_required = true;
+	} else if (!is_reflection_probe && using_upscaling) {
+		motion_vectors_required = true;
+	} else {
+		motion_vectors_required = false;
+	}
+
+	// setup scene data
+	{
+		scene_data.taa_jitter = p_camera_data->taa_jitter;
+		scene_data.prev_taa_jitter = p_prev_camera_data->taa_jitter;
+		scene_data.taa_frame_count = p_camera_data->taa_frame_count;
+		scene_data.main_cam_transform = p_camera_data->main_transform;
+		scene_data.view_count = p_camera_data->view_count;
+		scene_data.calculate_motion_vectors = motion_vectors_required;
+
+		// Our first camera is used by default
+		RenderSceneDataRD::CameraData &camera = scene_data.new_camera();
+		
+		camera.cam_transform = p_camera_data->main_transform;
+		camera.cam_projection = p_camera_data->main_projection;
+		camera.prev_cam_projection = p_prev_camera_data->main_projection;
+		camera.prev_cam_transform = p_prev_camera_data->main_transform;
+		camera.cam_orthogonal = p_camera_data->is_orthogonal;
+		camera.cam_frustum = p_camera_data->is_frustum;
+		camera.camera_visible_layers = p_camera_data->visible_layers;
+		camera.flip_y = !p_reflection_probe.is_valid();
+		camera.environment = p_environment;
+
+		if (scene_data.view_count > 1) {
+			RenderSceneDataRD::MultiCameraData &multi_camera = scene_data.first_multi_camera();
+			for (uint32_t v = 0; v < p_camera_data->view_count; v++) {
+				scene_data.view_eye_offset[v] = p_camera_data->view_offset[v].origin;
+				multi_camera.view_projection[v] = p_camera_data->view_projection[v];
+				if (motion_vectors_required) {
+					multi_camera.prev_view_projection[v] = p_prev_camera_data->view_projection[v];
+				}
+			}
+		}
+
+		// Use shadow projection, main projection here doesn't make sense if it's oblique (and has led to buggy behaviour)
+		camera.z_near = p_camera_data->shadow_projection.get_z_near();
+		camera.z_far = p_camera_data->shadow_projection.get_z_far();
+
+		if (p_environment.is_valid()) {
+			RID sky_rid = environment_get_sky(p_environment);
+			if (sky_rid.is_valid()) {
+				int radiance_size = sky.sky_get_radiance_size(sky_rid);
+				camera.radiance_pixel_size = 1.0f / radiance_size;
+				float uv_border_size = sky.sky_get_uv_border_size(sky_rid);
+				camera.radiance_border_size = uv_border_size;
+			}
+		}
+		
+		if (!p_portal_info.is_empty()) {
+			// Set up portal cameras
+			for (const PortalRenderInfo &portal : p_portal_info) {
+				RenderSceneDataRD::CameraData &portal_camera = scene_data.new_camera();
+
+				portal_camera = camera;
+				
+				portal_camera.cam_transform = portal.cam_transform;
+				portal_camera.prev_cam_transform = portal.portal_transform * p_prev_camera_data->main_transform;
+				portal_camera.cam_projection = portal_storage->portal_get_oblique_projection(portal.portal, p_camera_data->shadow_projection, portal_camera.cam_transform);
+				portal_camera.prev_cam_projection = portal_storage->portal_get_oblique_projection(portal.portal, p_prev_camera_data->shadow_projection, portal_camera.prev_cam_transform);
+				
+				portal_camera.camera_visible_layers = portal.get_cull_mask(p_portal_info, p_camera_data->visible_layers);
+				portal_camera.portal_depth = portal.depth;
+				portal_camera.environment = portal.environment;
+
+				if (scene_data.view_count > 1) {
+					RenderSceneDataRD::MultiCameraData &multi_camera = scene_data.last_multi_camera();
+					for (uint32_t v = 0; v < p_camera_data->view_count; v++) {
+						Transform3D eye_transform = p_camera_data->view_offset[v] * portal.cam_transform;
+						multi_camera.view_projection[v] = portal_storage->portal_get_oblique_projection(portal.portal, p_camera_data->view_projection[v], eye_transform);
+						if (motion_vectors_required) {
+							multi_camera.prev_view_projection[v] = p_prev_camera_data->view_projection[v];
+						}
+					}
+				}
+
+				// Set custom environment data if we have a custom environment
+				if (portal.environment != p_environment && portal.environment.is_valid()) {
+					RID sky_rid = environment_get_sky(portal.environment);
+					if (sky_rid.is_valid()) {
+						int radiance_size = sky.sky_get_radiance_size(sky_rid);
+						portal_camera.radiance_pixel_size = 1.0f / radiance_size;
+						float uv_border_size = sky.sky_get_uv_border_size(sky_rid);
+						portal_camera.radiance_border_size = uv_border_size;
+					}
+				}
+			}
+		}
+
+		scene_data.time = time;
+		scene_data.time_step = time_step;
+
+		// this should be the same for all cameras..
+		const float lod_distance_multiplier = p_camera_data->shadow_projection.get_lod_multiplier();
+
+		// Also, take into account resolution scaling for the multiplier, since we have more leeway with quality
+		// degradation visibility. Conversely, allow upwards scaling, too, for increased mesh detail at high res.
+		const float scaling_3d_scale = GLOBAL_GET_CACHED(float, "rendering/scaling_3d/scale");
+
+		scene_data.lod_distance_multiplier = lod_distance_multiplier * (1.0 / scaling_3d_scale);
+
+		if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD) {
+			scene_data.screen_mesh_lod_threshold = 0.0;
+		} else {
+			scene_data.screen_mesh_lod_threshold = p_screen_mesh_lod_threshold;
 		}
 	}
 
@@ -1769,6 +1858,7 @@ void RendererSceneRenderRD::init() {
 	mfx_spatial = memnew(RendererRD::MFXSpatialEffect);
 #endif
 	resolve_effects = memnew(RendererRD::Resolve(!can_use_storage));
+	portal_render = memnew(RendererRD::PortalRender);
 }
 
 RendererSceneRenderRD::~RendererSceneRenderRD() {
@@ -1808,6 +1898,10 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 
 	if (resolve_effects) {
 		memdelete(resolve_effects);
+	}
+
+	if (portal_render) {
+		memdelete(portal_render);
 	}
 
 	if (sky.sky_scene_state.uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(sky.sky_scene_state.uniform_set)) {

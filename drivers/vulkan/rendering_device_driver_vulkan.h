@@ -211,14 +211,21 @@ public:
 		} allocation;
 		uint64_t size = 0;
 		VkBufferView vk_view = VK_NULL_HANDLE; // For texel buffers.
-		// If dynamic buffer, then its range is [0; RenderingDeviceDriverVulkan::frame_count)
-		// else it's UINT32_MAX.
-		uint32_t frame_idx = UINT32_MAX;
+		
+		// If a dynamic buffer, this is greater than 0.
+		uint32_t frames = 0;
 
-		bool is_dynamic() const { return frame_idx != UINT32_MAX; }
+		// If a dynamic buffer, this is the current frame we're working with.
+		// If a dynamic offset is not provided when binding a uniform set, this value will be used as the bind offset
+		uint32_t frame_idx = 0;
+
+		BitField<BufferUsageBits> usage;
+
+		bool is_dynamic() const { return frames > 0; }
+		bool is_persistent() const { return usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT); }
 	};
 
-	struct BufferDynamicInfo : BufferInfo {
+	struct BufferPersistentInfo : BufferInfo {
 		uint8_t *persistent_ptr = nullptr;
 #ifdef DEBUG_ENABLED
 		// For tracking that a persistent buffer isn't mapped twice in the same frame.
@@ -226,14 +233,15 @@ public:
 #endif
 	};
 
-	virtual BufferID buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) override final;
+	virtual BufferID buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn, uint32_t p_frames = 0) override final;
 	virtual bool buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) override final;
 	virtual void buffer_free(BufferID p_buffer) override final;
 	virtual uint64_t buffer_get_allocation_size(BufferID p_buffer) override final;
+	virtual uint64_t buffer_get_frame_size(BufferID p_buffer) override final;
 	virtual uint8_t *buffer_map(BufferID p_buffer) override final;
 	virtual void buffer_unmap(BufferID p_buffer) override final;
 	virtual uint8_t *buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) override final;
-	virtual uint64_t buffer_get_dynamic_offsets(Span<BufferID> p_buffers) override final;
+	virtual LocalVector<uint32_t> buffer_get_dynamic_offsets(Span<BufferID> p_buffers) override final;
 	virtual void buffer_flush(BufferID p_buffer) override final;
 	virtual uint64_t buffer_get_device_address(BufferID p_buffer) override final;
 
@@ -518,7 +526,7 @@ public:
 	virtual void linear_uniform_set_pools_reset(int p_linear_pool_index) override final;
 	virtual void uniform_set_free(UniformSetID p_uniform_set) override final;
 	virtual bool uniform_sets_have_linear_pools() const override final;
-	virtual uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const override final;
+	virtual LocalVector<uint32_t> uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, VectorView<int> p_dynamic_frames = VectorView<int>()) const override final;
 
 	// ----- COMMANDS -----
 
@@ -607,7 +615,7 @@ public:
 
 	// Binding.
 	virtual void command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override final;
-	virtual void command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) override final;
+	virtual void command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, VectorView<uint32_t> p_dynamic_offsets) override final;
 
 	// Drawing.
 	virtual void command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) override final;
@@ -618,12 +626,18 @@ public:
 	virtual void command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) override final;
 
 	// Buffer binding.
-	virtual void command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) override final;
+	virtual void command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, VectorView<uint32_t> p_dynamic_offsets) override final;
 	virtual void command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) override final;
 
 	// Dynamic state.
 	virtual void command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) override final;
 	virtual void command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) override final;
+	virtual void command_render_set_stencil_masks(CommandBufferID p_cmd_buffer, RDD::StencilFace p_face_mask, uint32_t p_reference, uint32_t p_compare_mask, uint32_t p_write_mask) override final;
+
+#ifdef EXTENDED_DYNAMIC_STATE
+	virtual void command_render_set_stencil_enabled(CommandBufferID p_cmd_buffer, bool p_enabled) override final;
+	virtual void command_render_set_stencil_operators(CommandBufferID p_cmd_buffer, RDD::StencilFace p_face_mask, RDD::StencilOperation p_fail, RDD::StencilOperation p_pass, RDD::StencilOperation p_depth_fail, RDD::CompareOperator p_compare) override final;
+#endif // EXTENDED_DYNAMIC_STATE
 
 	// ----- PIPELINE -----
 
@@ -649,7 +663,7 @@ public:
 
 	// Binding.
 	virtual void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override final;
-	virtual void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) override final;
+	virtual void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, VectorView<uint32_t> p_dynamic_offsets) override final;
 
 	// Dispatching.
 	virtual void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) override final;

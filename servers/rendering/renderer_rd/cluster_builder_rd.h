@@ -34,6 +34,9 @@
 #include "servers/rendering/renderer_rd/shaders/cluster_render.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/cluster_store.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/portal_storage.h"
+#include "servers/rendering/renderer_rd/layout_rules.h"
+#include "servers/rendering/renderer_rd/dynamic_buffer.h"
 
 class ClusterBuilderSharedDataRD {
 	friend class ClusterBuilderRD;
@@ -63,10 +66,19 @@ class ClusterBuilderSharedDataRD {
 
 	struct ClusterRender {
 		struct PushConstant {
+			std430_mat4 projection;
+
 			uint32_t base_index;
-			uint32_t pad0;
-			uint32_t pad1;
-			uint32_t pad2;
+			uint32_t base_offset;
+			uint32_t dest_offset;
+
+			uint32_t cluster_screen_width;
+			uint32_t cluster_data_size; 
+			uint32_t cluster_depth_offset;
+			uint32_t screen_to_clusters_shift;
+			
+			float inv_z_far;
+			std430_uvec2 cluster_screen_offset; 
 		};
 
 		ClusterRenderShaderRD cluster_render_shader;
@@ -95,12 +107,14 @@ class ClusterBuilderSharedDataRD {
 		struct PushConstant {
 			uint32_t cluster_render_data_size; // how much data for a single cluster takes
 			uint32_t max_render_element_count_div_32; // divided by 32
-			uint32_t cluster_screen_size[2];
+			std430_uvec2 cluster_screen_size;
 			uint32_t render_element_count_div_32; // divided by 32
 			uint32_t max_cluster_element_count_div_32; // divided by 32
 
-			uint32_t pad1;
-			uint32_t pad2;
+			uint32_t render_buffer_offset;
+			uint32_t dest_buffer_offset;
+			uint32_t element_buffer_offset;
+			uint32_t pad[3];
 		};
 
 		ClusterStoreShaderRD cluster_store_shader;
@@ -138,6 +152,35 @@ public:
 };
 
 class ClusterBuilderRD {
+private:
+
+	struct RenderElementData {
+		uint32_t type; // 0-4
+		uint32_t touches_near;
+		uint32_t touches_far;
+		uint32_t original_index;
+		float transform_inv[12]; // Transposed transform for less space.
+		float scale[3];
+		uint32_t has_wide_spot_angle;
+
+		_FORCE_INLINE_ float sort_value() const {
+			return (type != ELEMENT_TYPE_REFLECTION_PROBE) ? -transform_inv[11] : scale_sort_size();
+		}
+
+		_FORCE_INLINE_ float scale_sort_size() const {
+			return scale[0] * scale[0] + scale[1] * scale[1] + scale[2] * scale[2];
+		}
+
+		// For portals, so we can optimally sort them.
+		// This is specifically for choosing new values for the index remap.
+		struct SortComparator {
+			_ALWAYS_INLINE_ bool operator()(const RenderElementData &p_a, const RenderElementData &p_b) const {
+				return p_a.type == p_b.type && p_a.sort_value() < p_b.sort_value();
+			}
+		};
+	}; // Keep aligned to 32 bytes.
+	// ??? Doesn't seem very aligned to 32 bytes
+
 public:
 	static constexpr float WIDE_SPOT_ANGLE_THRESHOLD_DEG = 60.0f;
 
@@ -159,25 +202,52 @@ public:
 		ELEMENT_TYPE_MAX,
 	};
 
+	struct ClusterPortal {
+		Size2i cluster_screen_offset;
+		Size2i cluster_screen_size;
+		Rect2 render_region;
+		uint32_t cluster_type_size = 0;
+		uint32_t buffer_offset = 0;
+
+		// Information about the index remap, used specifically when portals are sharing clustered items but from different views,
+		// leading to a sub-optimal cluster buffer ordering. This is just to remap indices into something more optimal (usually depth-based).
+		// Portals are free to not use this remap if the ordering of items is close enough to the normal ordering, which helps tremendously for recursive portals.
+		// Portals will also not use this remap if they have their own unique set of clustered items or only uses some sub-section that is already contiguous,
+		// in which the cluster buffer will just offset into those indices directly.
+		// The index map is placed at the end of the cluster data for that portal, and this is used to offset into the maps for different types.
+
+		uint32_t remap_length = 0;
+
+	protected:
+
+		friend class ClusterBuilderRD;
+
+		LocalVector<uint32_t> remap;
+		LocalVector<RenderElementData> render_elements;
+		Transform3D view_xform;
+
+		uint32_t render_element_offset;
+		uint32_t render_buffer_offset;
+		uint32_t render_element_max;
+
+		_FORCE_INLINE_ RenderElementData &new_render_element() {
+			render_elements.push_back(RenderElementData());
+			return render_elements[render_elements.size()-1];
+		}
+	};
+
 private:
 	ClusterBuilderSharedDataRD *shared = nullptr;
-
-	struct RenderElementData {
-		uint32_t type; // 0-4
-		uint32_t touches_near;
-		uint32_t touches_far;
-		uint32_t original_index;
-		float transform_inv[12]; // Transposed transform for less space.
-		float scale[3];
-		uint32_t has_wide_spot_angle;
-	}; // Keep aligned to 32 bytes.
 
 	uint32_t cluster_count_by_type[ELEMENT_TYPE_MAX] = {};
 	uint32_t max_elements_by_type = 0;
 
-	RenderElementData *render_elements = nullptr;
-	uint32_t render_element_count = 0;
+	// RenderElementData *render_elements = nullptr;
+	LocalVector<RenderElementData> render_elements;
 	uint32_t render_element_max = 0;
+
+	uint32_t portal_count = 0;
+	LocalVector<ClusterPortal> cluster_portals;
 
 	Transform3D view_xform;
 	Projection adjusted_projection;
@@ -212,6 +282,10 @@ private:
 	RID element_buffer; // Used for storing, to hint element touches far plane or near plane.
 	uint32_t cluster_render_buffer_size = 0;
 	uint32_t cluster_buffer_size = 0;
+	uint32_t cluster_buffer_base_size = 0;
+	uint32_t cluster_buffer_capacity = 0;
+	uint32_t cluster_render_buffer_capacity = 0;
+	uint32_t element_buffer_capacity = 0;
 
 	RID cluster_render_uniform_set;
 	RID cluster_store_uniform_set;
@@ -219,8 +293,17 @@ private:
 	// Persistent data.
 
 	void _clear();
+	void _process_portals();
+	void _make_uniform_sets(RID p_depth_buffer = RID(), RID p_depth_buffer_sampler = RID(), RID p_color_buffer = RID());
+
+	_FORCE_INLINE_ RenderElementData &new_render_element() {
+		render_elements.push_back(RenderElementData());
+		return render_elements[render_elements.size()-1];
+	}
 
 	struct StateUniform {
+		std140_mat4 projection;
+		/*
 		float projection[16];
 		float inv_z_far;
 		uint32_t screen_to_clusters_shift; // Shift to obtain coordinates in block indices.
@@ -231,29 +314,28 @@ private:
 		uint32_t pad0;
 		uint32_t pad1;
 		uint32_t pad2;
+		*/
 	};
 
-	RID state_uniform;
+	// RID state_uniform;
 
 	RID debug_uniform_set;
 
 public:
 	void setup(Size2i p_screen_size, uint32_t p_max_elements, RID p_depth_buffer, RID p_depth_buffer_sampler, RID p_color_buffer);
 
-	void begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y);
+	// Note - when portal rendering, the non-oblique camera projection should be passed. In other words, *always* pass the projection of the first camera.
+	void begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y, Span<PortalRenderInfo> p_portals = Span<PortalRenderInfo>());
 
-	_FORCE_INLINE_ void add_light(LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture) {
-		if (p_type == LIGHT_TYPE_OMNI && cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] == max_elements_by_type) {
+	_FORCE_INLINE_ void add_light(LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, uint32_t p_index, int p_portal_index = 0) {
+		if (p_index >= max_elements_by_type) {
 			return; // Max number elements reached.
 		}
-		if (p_type == LIGHT_TYPE_SPOT && cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT] == max_elements_by_type) {
-			return; // Max number elements reached.
-		}
 
-		RenderElementData &e = render_elements[render_element_count];
-
-		Transform3D xform = view_xform * p_transform;
-
+		RenderElementData &e = (p_portal_index == 0) ? new_render_element() : cluster_portals[p_portal_index-1].new_render_element();
+		const Transform3D &view = (p_portal_index == 0) ? view_xform : cluster_portals[p_portal_index-1].view_xform;
+		Transform3D xform = view * p_transform;
+		
 		float radius = xform.basis.get_uniform_scale();
 		if (radius < 0.98 || radius > 1.02) {
 			xform.basis.orthonormalize();
@@ -261,7 +343,7 @@ public:
 
 		radius *= p_radius;
 
-		// Spotlights with wide angle are trated as Omni lights.
+		// Spotlights with wide angle are treated as Omni lights.
 		// If the spot angle is above the threshold, we need a sphere instead of a cone for building the clusters
 		// since the cone gets too flat/large (spot angle close to 90 degrees) or
 		// can't even cover the affected area of the light (spot angle above 90 degrees).
@@ -283,14 +365,15 @@ public:
 			e.scale[2] = radius;
 			if (p_type == LIGHT_TYPE_OMNI) {
 				e.type = ELEMENT_TYPE_OMNI_LIGHT;
-				e.original_index = cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT];
-				cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT]++;
-			} else { // LIGHT_TYPE_SPOT with wide angle.
+				cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] = MAX(cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT], p_index+1);
+			}
+			else { // LIGHT_TYPE_SPOT with wide angle.
 				e.type = ELEMENT_TYPE_SPOT_LIGHT;
 				e.has_wide_spot_angle = true;
-				e.original_index = cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT];
-				cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT]++;
+				cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT] = MAX(cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT], p_index+1);
 			}
+
+			e.original_index = p_index;
 
 			RendererRD::MaterialStorage::store_transform_transposed_3x4(xform, e.transform_inv);
 
@@ -333,26 +416,22 @@ public:
 			e.scale[2] = radius;
 			e.has_wide_spot_angle = false;
 			e.type = ELEMENT_TYPE_SPOT_LIGHT;
-			e.original_index = cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT];
+			e.original_index = p_index;
+			
+			cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT] = MAX(cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT], p_index+1);
 
 			RendererRD::MaterialStorage::store_transform_transposed_3x4(xform, e.transform_inv);
-
-			cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT]++;
 		}
-
-		render_element_count++;
 	}
 
-	_FORCE_INLINE_ void add_box(BoxType p_box_type, const Transform3D &p_transform, const Vector3 &p_half_size) {
-		if (p_box_type == BOX_TYPE_DECAL && cluster_count_by_type[ELEMENT_TYPE_DECAL] == max_elements_by_type) {
-			return; // Max number elements reached.
-		}
-		if (p_box_type == BOX_TYPE_REFLECTION_PROBE && cluster_count_by_type[ELEMENT_TYPE_REFLECTION_PROBE] == max_elements_by_type) {
+	_FORCE_INLINE_ void add_box(BoxType p_box_type, const Transform3D &p_transform, const Vector3 &p_half_size, uint32_t p_index, int p_portal_index = 0) {
+		if (p_index >= max_elements_by_type) {
 			return; // Max number elements reached.
 		}
 
-		RenderElementData &e = render_elements[render_element_count];
-		Transform3D xform = view_xform * p_transform;
+		RenderElementData &e = (p_portal_index == 0) ? new_render_element() : cluster_portals[p_portal_index-1].new_render_element();
+		const Transform3D &view = (p_portal_index == 0) ? view_xform : cluster_portals[p_portal_index-1].view_xform;
+		Transform3D xform = view * p_transform;
 
 		// Extract scale and scale the matrix by it, makes things simpler.
 		Vector3 scale = p_half_size;
@@ -380,12 +459,14 @@ public:
 		e.scale[2] = scale.z;
 
 		e.type = (p_box_type == BOX_TYPE_DECAL) ? ELEMENT_TYPE_DECAL : ELEMENT_TYPE_REFLECTION_PROBE;
-		e.original_index = cluster_count_by_type[e.type];
+		e.original_index = p_index;
+		cluster_count_by_type[e.type] = MAX(cluster_count_by_type[e.type], p_index+1);
 
 		RendererRD::MaterialStorage::store_transform_transposed_3x4(xform, e.transform_inv);
+	}
 
-		cluster_count_by_type[e.type]++;
-		render_element_count++;
+	_FORCE_INLINE_ const ClusterPortal &get_cluster_portal(int p_index) const {
+		return cluster_portals[p_index];
 	}
 
 	void bake_cluster();

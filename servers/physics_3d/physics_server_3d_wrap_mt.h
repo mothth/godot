@@ -392,6 +392,46 @@ public:
 	FUNC2(joint_disable_collisions_between_bodies, RID, bool);
 	FUNC1RC(bool, joint_is_disabled_collisions_between_bodies, RID);
 
+	/* Portal API */
+
+	FUNCRID(portal);
+
+	FUNC2(portal_set_space, RID, RID);
+	FUNC1RC(RID, portal_get_space, RID);
+
+	FUNC2(portal_set_partner, RID, RID);
+	FUNC1RC(RID, portal_get_partner, RID);
+
+	FUNC2(portal_set_ghost_mode, RID, PortalGhostMode);
+	FUNC1RC(PortalGhostMode, portal_get_ghost_mode, RID);
+
+	FUNC2(portal_set_collision_layer, RID, uint32_t);
+	FUNC1RC(uint32_t, portal_get_collision_layer, RID);
+	
+	FUNC2(portal_set_teleport_mask, RID, uint32_t);
+	FUNC1RC(uint32_t, portal_get_teleport_mask, RID);
+
+	FUNC2(portal_attach_object_instance_id, RID, ObjectID);
+	FUNC1RC(ObjectID, portal_get_object_instance_id, RID);
+
+	FUNC2(portal_set_transform, RID, const Transform3D &);
+	FUNC1RC(Transform3D, portal_get_transform, RID);
+
+	FUNC2(portal_set_shape_type, RID, PortalShapeType);
+	FUNC1RC(PortalShapeType, portal_get_shape_type, RID);
+
+	FUNC2(portal_set_shape_data, RID, const Variant &);
+	FUNC1RC(Variant, portal_get_shape_data, RID);
+
+	FUNC2(portal_set_disabled, RID, bool);
+	FUNC1RC(bool, portal_is_disabled, RID);
+
+	FUNC2(portal_set_monitor_callback, RID, const Callable &);
+	FUNC2(portal_set_teleport_callback, RID, const Callable &);
+
+	FUNC3(portal_set_param, RID, PortalParameter, const Variant &);
+	FUNC2RC(Variant, portal_get_param, RID, PortalParameter);
+
 	/* MISC */
 
 	FUNC1(free_rid, RID);

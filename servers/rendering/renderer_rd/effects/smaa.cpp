@@ -192,6 +192,7 @@ void SMAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_source_colo
 
 	RID edges_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(edges_tex, stencil_buffer);
 	RID blend_framebuffer = FramebufferCacheRD::get_singleton()->get_cache(blend_tex, stencil_buffer);
+	ERR_FAIL_COND(edges_framebuffer.is_null() || blend_framebuffer.is_null());
 
 	RD::Uniform u_source_color;
 	u_source_color.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;

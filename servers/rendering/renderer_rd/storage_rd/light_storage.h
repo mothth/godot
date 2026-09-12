@@ -126,12 +126,18 @@ private:
 
 		HashSet<RID> shadow_atlases; //shadow atlases where this light is registered
 
+		const PortalMaskData *portal_mask = nullptr; // Assigned from culling
+		PortalMaskData *parity_mask = nullptr; // An additional portal mask that may be created if not all lights have the same parameters in a given portal view
+
 		ForwardID forward_id = -1;
 
 		LightInstance() {}
 	};
 
 	mutable RID_Owner<LightInstance> light_instance_owner;
+
+	// Pool for additional portal masks if needed while updating light buffers
+	PagedArrayPool<PortalMaskData> parity_mask_pool;
 
 	/* OMNI/SPOT LIGHT DATA */
 
@@ -164,6 +170,7 @@ private:
 
 	struct LightInstanceDepthSort {
 		float depth;
+		int portal_index;
 		LightInstance *light_instance;
 		Light *light;
 		bool operator<(const LightInstanceDepthSort &p_sort) const {
@@ -287,6 +294,8 @@ private:
 		uint32_t cull_mask = 0;
 
 		RendererRD::ForwardID forward_id = -1;
+
+		const PortalMaskData *portal_mask = nullptr;
 
 		Transform3D transform;
 	};
@@ -611,6 +620,7 @@ public:
 	virtual void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) override;
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override;
 	virtual void light_instance_mark_visible(RID p_light_instance) override;
+	virtual void light_instance_set_portal_mask(RID p_light_instance, const PortalMaskData *p_mask) override;
 
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override {
 		const LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
@@ -923,6 +933,8 @@ public:
 	virtual bool reflection_probe_instance_end_render(RID p_instance, RID p_reflection_atlas) override;
 	virtual Ref<RenderSceneBuffers> reflection_probe_atlas_get_render_buffers(RID p_reflection_atlas) override;
 	virtual bool reflection_probe_instance_postprocess_step(RID p_instance) override;
+
+	virtual void reflection_probe_instance_set_portal_mask(RID p_instance, const PortalMaskData *p_mask) override;
 
 	uint32_t reflection_probe_instance_get_resolution(RID p_instance);
 	RID reflection_probe_instance_get_framebuffer(RID p_instance, int p_index);

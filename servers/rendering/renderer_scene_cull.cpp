@@ -226,7 +226,7 @@ void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 
 		if (light->uses_projector) {
 			geom->projector_count++;
-			if (geom->projector_count == 1) {
+			if (geom->projector_count == 1 && A->array_index >= 0) {
 				InstanceData &idata = A->scenario->instance_data[A->array_index];
 				idata.flags |= InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY;
 			}
@@ -234,7 +234,7 @@ void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 
 		if (light->uses_softshadow) {
 			geom->softshadow_count++;
-			if (geom->softshadow_count == 1) {
+			if (geom->softshadow_count == 1 && A->array_index >= 0) {
 				InstanceData &idata = A->scenario->instance_data[A->array_index];
 				idata.flags |= InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY;
 			}
@@ -356,7 +356,7 @@ void RendererSceneCull::_instance_unpair(Instance *p_A, Instance *p_B) {
 			}
 #endif
 			geom->projector_count--;
-			if (geom->projector_count == 0) {
+			if (geom->projector_count == 0 && A->array_index >= 0) {
 				InstanceData &idata = A->scenario->instance_data[A->array_index];
 				idata.flags |= InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY;
 			}
@@ -369,7 +369,7 @@ void RendererSceneCull::_instance_unpair(Instance *p_A, Instance *p_B) {
 			}
 #endif
 			geom->softshadow_count--;
-			if (geom->softshadow_count == 0) {
+			if (geom->softshadow_count == 0 && A->array_index >= 0) {
 				InstanceData &idata = A->scenario->instance_data[A->array_index];
 				idata.flags |= InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY;
 			}
@@ -624,6 +624,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 				scene_render->geometry_instance_free(geom->geometry_instance);
 			} break;
+			
 			case RS::INSTANCE_LIGHT: {
 				InstanceLightData *light = static_cast<InstanceLightData *>(instance->base_data);
 
@@ -642,17 +643,21 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				}
 				RSG::light_storage->light_instance_free(light->instance);
 			} break;
+
 			case RS::INSTANCE_PARTICLES_COLLISION: {
 				InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(instance->base_data);
 				RSG::utilities->free(collision->instance);
 			} break;
+
 			case RS::INSTANCE_FOG_VOLUME: {
 				InstanceFogVolumeData *volume = static_cast<InstanceFogVolumeData *>(instance->base_data);
 				scene_render->free(volume->instance);
 			} break;
+
 			case RS::INSTANCE_VISIBLITY_NOTIFIER: {
 				//none
 			} break;
+
 			case RS::INSTANCE_REFLECTION_PROBE: {
 				InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(instance->base_data);
 				RSG::light_storage->reflection_probe_instance_free(reflection_probe->instance);
@@ -660,11 +665,13 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 					reflection_probe_render_list.remove(&reflection_probe->update_list);
 				}
 			} break;
+
 			case RS::INSTANCE_DECAL: {
 				InstanceDecalData *decal = static_cast<InstanceDecalData *>(instance->base_data);
 				RSG::texture_storage->decal_instance_free(decal->instance);
 
 			} break;
+
 			case RS::INSTANCE_LIGHTMAP: {
 				InstanceLightmapData *lightmap_data = static_cast<InstanceLightmapData *>(instance->base_data);
 				//erase dependencies, since no longer a lightmap
@@ -673,6 +680,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				}
 				RSG::light_storage->lightmap_instance_free(lightmap_data->instance);
 			} break;
+
 			case RS::INSTANCE_VOXEL_GI: {
 				InstanceVoxelGIData *voxel_gi = static_cast<InstanceVoxelGIData *>(instance->base_data);
 #ifdef DEBUG_ENABLED
@@ -692,11 +700,22 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				scene_render->free(voxel_gi->probe_instance);
 
 			} break;
+
 			case RS::INSTANCE_OCCLUDER: {
 				if (scenario && instance->visible) {
 					RendererSceneOcclusionCull::get_singleton()->scenario_remove_instance(instance->scenario->self, p_instance);
 				}
 			} break;
+
+			case RS::INSTANCE_PORTAL: {
+				InstancePortalData *portal = static_cast<InstancePortalData *>(instance->base_data);
+				RSG::portal_storage->portal_instance_free(portal->instance);
+				if (scenario && portal->scenario_instance) {
+					scenario->portals.erase(portal->scenario_instance);
+					portal->scenario_instance = nullptr;
+				}
+			} break;
+
 			default: {
 			}
 		}
@@ -725,6 +744,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				ERR_PRINT_ONCE("unimplemented base type encountered in renderer scene cull");
 				return;
 			}
+
 			case RS::INSTANCE_LIGHT: {
 				InstanceLightData *light = memnew(InstanceLightData);
 
@@ -736,6 +756,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 
 				instance->base_data = light;
 			} break;
+
 			case RS::INSTANCE_MESH:
 			case RS::INSTANCE_MULTIMESH:
 			case RS::INSTANCE_PARTICLES: {
@@ -770,23 +791,27 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 					dep_instance->scenario->instance_data[dep_instance->array_index].parent_array_index = instance->array_index;
 				}
 			} break;
+
 			case RS::INSTANCE_PARTICLES_COLLISION: {
 				InstanceParticlesCollisionData *collision = memnew(InstanceParticlesCollisionData);
 				collision->instance = RSG::particles_storage->particles_collision_instance_create(p_base);
 				RSG::particles_storage->particles_collision_instance_set_active(collision->instance, instance->visible);
 				instance->base_data = collision;
 			} break;
+
 			case RS::INSTANCE_FOG_VOLUME: {
 				InstanceFogVolumeData *volume = memnew(InstanceFogVolumeData);
 				volume->instance = scene_render->fog_volume_instance_create(p_base);
 				scene_render->fog_volume_instance_set_active(volume->instance, instance->visible);
 				instance->base_data = volume;
 			} break;
+
 			case RS::INSTANCE_VISIBLITY_NOTIFIER: {
 				InstanceVisibilityNotifierData *vnd = memnew(InstanceVisibilityNotifierData);
 				vnd->base = p_base;
 				instance->base_data = vnd;
 			} break;
+
 			case RS::INSTANCE_REFLECTION_PROBE: {
 				InstanceReflectionProbeData *reflection_probe = memnew(InstanceReflectionProbeData);
 				reflection_probe->owner = instance;
@@ -794,6 +819,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 
 				reflection_probe->instance = RSG::light_storage->reflection_probe_instance_create(p_base);
 			} break;
+
 			case RS::INSTANCE_DECAL: {
 				InstanceDecalData *decal = memnew(InstanceDecalData);
 				decal->owner = instance;
@@ -802,11 +828,13 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				decal->instance = RSG::texture_storage->decal_instance_create(p_base);
 				RSG::texture_storage->decal_instance_set_sorting_offset(decal->instance, instance->sorting_offset);
 			} break;
+
 			case RS::INSTANCE_LIGHTMAP: {
 				InstanceLightmapData *lightmap_data = memnew(InstanceLightmapData);
 				instance->base_data = lightmap_data;
 				lightmap_data->instance = RSG::light_storage->lightmap_instance_create(p_base);
 			} break;
+
 			case RS::INSTANCE_VOXEL_GI: {
 				InstanceVoxelGIData *voxel_gi = memnew(InstanceVoxelGIData);
 				instance->base_data = voxel_gi;
@@ -819,11 +847,22 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				voxel_gi->probe_instance = scene_render->voxel_gi_instance_create(p_base);
 
 			} break;
+
 			case RS::INSTANCE_OCCLUDER: {
 				if (scenario) {
 					RendererSceneOcclusionCull::get_singleton()->scenario_set_instance(scenario->self, p_instance, p_base, instance->transform, instance->visible);
 				}
 			} break;
+
+			case RS::INSTANCE_PORTAL: {
+				InstancePortalData *portal = memnew(InstancePortalData);
+				instance->base_data = portal;
+				portal->instance = RSG::portal_storage->portal_instance_create(p_base);
+				if (scenario) {
+					portal->scenario_instance = scenario->portals.push_back(instance);
+				}
+			} break;
+
 			default: {
 			}
 		}
@@ -900,6 +939,13 @@ void RendererSceneCull::instance_set_scenario(RID p_instance, RID p_scenario) {
 					RendererSceneOcclusionCull::get_singleton()->scenario_remove_instance(instance->scenario->self, p_instance);
 				}
 			} break;
+			case RS::INSTANCE_PORTAL: {
+				InstancePortalData *portal = static_cast<InstancePortalData *>(instance->base_data);
+				if (portal->scenario_instance) {
+					instance->scenario->portals.erase(portal->scenario_instance);
+					portal->scenario_instance = nullptr;
+				}
+			} break;
 			default: {
 			}
 		}
@@ -931,6 +977,12 @@ void RendererSceneCull::instance_set_scenario(RID p_instance, RID p_scenario) {
 			} break;
 			case RS::INSTANCE_OCCLUDER: {
 				RendererSceneOcclusionCull::get_singleton()->scenario_set_instance(scenario->self, p_instance, instance->base, instance->transform, instance->visible);
+			} break;
+			case RS::INSTANCE_PORTAL: {
+				if (instance->visible) {
+					InstancePortalData *data = static_cast<InstancePortalData *>(instance->base_data);
+					data->scenario_instance = scenario->portals.push_back(instance);
+				}
 			} break;
 			default: {
 			}
@@ -1105,6 +1157,17 @@ void RendererSceneCull::instance_set_visible(RID p_instance, bool p_visible) {
 	if (instance->base_type == RS::INSTANCE_OCCLUDER) {
 		if (instance->scenario) {
 			RendererSceneOcclusionCull::get_singleton()->scenario_set_instance(instance->scenario->self, p_instance, instance->base, instance->transform, p_visible);
+		}
+	}
+
+	if (instance->base_type == RS::INSTANCE_PORTAL && instance->scenario) {
+		InstancePortalData *portal = static_cast<InstancePortalData *>(instance->base_data);
+		if (p_visible) {
+			portal->scenario_instance = instance->scenario->portals.push_back(instance);
+		}
+		else if (portal->scenario_instance) {
+			instance->scenario->portals.erase(portal->scenario_instance);
+			portal->scenario_instance = nullptr;
 		}
 	}
 }
@@ -1636,73 +1699,110 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 	// However it does seem that using the interpolated transform (transform) works for keeping AABBs
 	// up to date to avoid culling errors.
 
-	if (p_instance->base_type == RS::INSTANCE_LIGHT) {
-		InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
+	switch (p_instance->base_type) {
+		case RS::INSTANCE_NONE: {
+			return;
+		} break;
 
-		RSG::light_storage->light_instance_set_transform(light->instance, *instance_xform);
-		RSG::light_storage->light_instance_set_aabb(light->instance, instance_xform->xform(p_instance->aabb));
-		light->make_shadow_dirty();
+		// Particles
+		case RS::INSTANCE_PARTICLES: {
+			RSG::particles_storage->particles_set_emission_transform(p_instance->base, *instance_xform);
+		} break;
 
-		RS::LightBakeMode bake_mode = RSG::light_storage->light_get_bake_mode(p_instance->base);
-		if (RSG::light_storage->light_get_type(p_instance->base) != RS::LIGHT_DIRECTIONAL && bake_mode != light->bake_mode) {
-			if (p_instance->visible && p_instance->scenario && light->bake_mode == RS::LIGHT_BAKE_DYNAMIC) {
-				p_instance->scenario->dynamic_lights.erase(light->instance);
+		// Particle collision
+		case RS::INSTANCE_PARTICLES_COLLISION: {
+
+			InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(p_instance->base_data);
+
+			//remove materials no longer used and un-own them
+			if (RSG::particles_storage->particles_collision_is_heightfield(p_instance->base)) {
+				heightfield_particle_colliders_update_list.insert(p_instance);
+			}
+			RSG::particles_storage->particles_collision_instance_set_transform(collision->instance, *instance_xform);
+			collision->cull_mask = RSG::particles_storage->particles_collision_get_cull_mask(p_instance->base);
+
+		} break;
+
+		// Lights
+		case RS::INSTANCE_LIGHT: {
+
+			InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
+
+			RSG::light_storage->light_instance_set_transform(light->instance, *instance_xform);
+			RSG::light_storage->light_instance_set_aabb(light->instance, instance_xform->xform(p_instance->aabb));
+			light->make_shadow_dirty();
+
+			RS::LightBakeMode bake_mode = RSG::light_storage->light_get_bake_mode(p_instance->base);
+			if (RSG::light_storage->light_get_type(p_instance->base) != RS::LIGHT_DIRECTIONAL && bake_mode != light->bake_mode) {
+				if (p_instance->visible && p_instance->scenario && light->bake_mode == RS::LIGHT_BAKE_DYNAMIC) {
+					p_instance->scenario->dynamic_lights.erase(light->instance);
+				}
+
+				light->bake_mode = bake_mode;
+
+				if (p_instance->visible && p_instance->scenario && light->bake_mode == RS::LIGHT_BAKE_DYNAMIC) {
+					p_instance->scenario->dynamic_lights.push_back(light->instance);
+				}
 			}
 
-			light->bake_mode = bake_mode;
-
-			if (p_instance->visible && p_instance->scenario && light->bake_mode == RS::LIGHT_BAKE_DYNAMIC) {
-				p_instance->scenario->dynamic_lights.push_back(light->instance);
+			uint32_t max_sdfgi_cascade = RSG::light_storage->light_get_max_sdfgi_cascade(p_instance->base);
+			if (light->max_sdfgi_cascade != max_sdfgi_cascade) {
+				light->max_sdfgi_cascade = max_sdfgi_cascade; //should most likely make sdfgi dirty in scenario
 			}
-		}
+			light->cull_mask = RSG::light_storage->light_get_cull_mask(p_instance->base);
 
-		uint32_t max_sdfgi_cascade = RSG::light_storage->light_get_max_sdfgi_cascade(p_instance->base);
-		if (light->max_sdfgi_cascade != max_sdfgi_cascade) {
-			light->max_sdfgi_cascade = max_sdfgi_cascade; //should most likely make sdfgi dirty in scenario
-		}
-		light->cull_mask = RSG::light_storage->light_get_cull_mask(p_instance->base);
-	} else if (p_instance->base_type == RS::INSTANCE_REFLECTION_PROBE) {
-		InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(p_instance->base_data);
+		} break;
 
-		RSG::light_storage->reflection_probe_instance_set_transform(reflection_probe->instance, *instance_xform);
+		// Reflection probes
+		case RS::INSTANCE_REFLECTION_PROBE: {
+			InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(p_instance->base_data);
+			RSG::light_storage->reflection_probe_instance_set_transform(reflection_probe->instance, *instance_xform);
+			if (p_instance->scenario && p_instance->array_index >= 0) {
+				InstanceData &idata = p_instance->scenario->instance_data[p_instance->array_index];
+				idata.flags |= InstanceData::FLAG_REFLECTION_PROBE_DIRTY;
+			}
+		} break;
 
-		if (p_instance->scenario && p_instance->array_index >= 0) {
-			InstanceData &idata = p_instance->scenario->instance_data[p_instance->array_index];
-			idata.flags |= InstanceData::FLAG_REFLECTION_PROBE_DIRTY;
-		}
-	} else if (p_instance->base_type == RS::INSTANCE_DECAL) {
-		InstanceDecalData *decal = static_cast<InstanceDecalData *>(p_instance->base_data);
+		// Decals
+		case RS::INSTANCE_DECAL: {
+			InstanceDecalData *decal = static_cast<InstanceDecalData *>(p_instance->base_data);
+			RSG::texture_storage->decal_instance_set_transform(decal->instance, *instance_xform);
+			decal->cull_mask = RSG::texture_storage->decal_get_cull_mask(p_instance->base);
+		} break;
 
-		RSG::texture_storage->decal_instance_set_transform(decal->instance, *instance_xform);
-		decal->cull_mask = RSG::texture_storage->decal_get_cull_mask(p_instance->base);
-	} else if (p_instance->base_type == RS::INSTANCE_LIGHTMAP) {
-		InstanceLightmapData *lightmap = static_cast<InstanceLightmapData *>(p_instance->base_data);
+		// VoxelGI
+		case RS::INSTANCE_VOXEL_GI: {
+			InstanceVoxelGIData *voxel_gi = static_cast<InstanceVoxelGIData *>(p_instance->base_data);
+			scene_render->voxel_gi_instance_set_transform_to_data(voxel_gi->probe_instance, *instance_xform);
+		} break;
 
-		RSG::light_storage->lightmap_instance_set_transform(lightmap->instance, *instance_xform);
-	} else if (p_instance->base_type == RS::INSTANCE_VOXEL_GI) {
-		InstanceVoxelGIData *voxel_gi = static_cast<InstanceVoxelGIData *>(p_instance->base_data);
+		// Lightmaps
+		case RS::INSTANCE_LIGHTMAP: {
+			InstanceLightmapData *lightmap = static_cast<InstanceLightmapData *>(p_instance->base_data);
+			RSG::light_storage->lightmap_instance_set_transform(lightmap->instance, *instance_xform);
+		} break;
 
-		scene_render->voxel_gi_instance_set_transform_to_data(voxel_gi->probe_instance, *instance_xform);
-	} else if (p_instance->base_type == RS::INSTANCE_PARTICLES) {
-		RSG::particles_storage->particles_set_emission_transform(p_instance->base, *instance_xform);
-	} else if (p_instance->base_type == RS::INSTANCE_PARTICLES_COLLISION) {
-		InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(p_instance->base_data);
+		// Occluders
+		case RS::INSTANCE_OCCLUDER: {
+			if (p_instance->scenario) {
+				RendererSceneOcclusionCull::get_singleton()->scenario_set_instance(p_instance->scenario->self, p_instance->self, p_instance->base, *instance_xform, p_instance->visible);
+			}
+		} break;
 
-		//remove materials no longer used and un-own them
-		if (RSG::particles_storage->particles_collision_is_heightfield(p_instance->base)) {
-			heightfield_particle_colliders_update_list.insert(p_instance);
-		}
-		RSG::particles_storage->particles_collision_instance_set_transform(collision->instance, *instance_xform);
-		collision->cull_mask = RSG::particles_storage->particles_collision_get_cull_mask(p_instance->base);
-	} else if (p_instance->base_type == RS::INSTANCE_FOG_VOLUME) {
-		InstanceFogVolumeData *volume = static_cast<InstanceFogVolumeData *>(p_instance->base_data);
-		scene_render->fog_volume_instance_set_transform(volume->instance, *instance_xform);
-	} else if (p_instance->base_type == RS::INSTANCE_OCCLUDER) {
-		if (p_instance->scenario) {
-			RendererSceneOcclusionCull::get_singleton()->scenario_set_instance(p_instance->scenario->self, p_instance->self, p_instance->base, *instance_xform, p_instance->visible);
-		}
-	} else if (p_instance->base_type == RS::INSTANCE_NONE) {
-		return;
+		// Fog volumes
+		case RS::INSTANCE_FOG_VOLUME: {
+			InstanceFogVolumeData *volume = static_cast<InstanceFogVolumeData *>(p_instance->base_data);
+			scene_render->fog_volume_instance_set_transform(volume->instance, *instance_xform);
+		} break;
+
+		// Portals
+		case RS::INSTANCE_PORTAL: {
+			InstancePortalData *portal = static_cast<InstancePortalData *>(p_instance->base_data);
+			RSG::portal_storage->portal_instance_set_transform(portal->instance, *instance_xform);
+			RSG::portal_storage->portal_instance_set_aabb(portal->instance, instance_xform->xform(p_instance->aabb));
+		} break;
+
+		default: break;
 	}
 
 	if (!p_instance->aabb.has_surface()) {
@@ -1833,6 +1933,9 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 			case RS::INSTANCE_VISIBLITY_NOTIFIER: {
 				idata.visibility_notifier = static_cast<InstanceVisibilityNotifierData *>(p_instance->base_data);
 			} break;
+			case RS::INSTANCE_PORTAL: {
+				idata.instance_data_rid = static_cast<InstancePortalData *>(p_instance->base_data)->instance.get_id();
+			} break;
 			default: {
 			}
 		}
@@ -1901,32 +2004,45 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 		pair.pair_mask |= geometry_instance_pair_mask;
 
 		pair.bvh2 = &p_instance->scenario->indexers[Scenario::INDEXER_VOLUMES];
-	} else if (p_instance->base_type == RS::INSTANCE_LIGHT) {
-		pair.pair_mask |= RS::INSTANCE_GEOMETRY_MASK;
-		pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
+	}
+	else switch (p_instance->base_type) {
+		case RS::INSTANCE_PARTICLES_COLLISION: {
+			pair.pair_mask = (1 << RS::INSTANCE_PARTICLES);
+			pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
+		} break;
 
-		RS::LightBakeMode bake_mode = RSG::light_storage->light_get_bake_mode(p_instance->base);
-		if (bake_mode == RS::LIGHT_BAKE_STATIC || bake_mode == RS::LIGHT_BAKE_DYNAMIC) {
-			pair.pair_mask |= (1 << RS::INSTANCE_VOXEL_GI);
+		case RS::INSTANCE_LIGHT: {
+			pair.pair_mask |= RS::INSTANCE_GEOMETRY_MASK;
+			pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
+			RS::LightBakeMode bake_mode = RSG::light_storage->light_get_bake_mode(p_instance->base);
+			if (bake_mode == RS::LIGHT_BAKE_STATIC || bake_mode == RS::LIGHT_BAKE_DYNAMIC) {
+				pair.pair_mask |= (1 << RS::INSTANCE_VOXEL_GI);
+				pair.bvh2 = &p_instance->scenario->indexers[Scenario::INDEXER_VOLUMES];
+			}
+		} break;
+
+		case RS::INSTANCE_REFLECTION_PROBE:
+		case RS::INSTANCE_DECAL: {
+			if (geometry_instance_pair_mask & (1 << p_instance->base_type)) {
+				pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK;
+				pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
+			}
+		} break;
+
+		case RS::INSTANCE_VOXEL_GI: {
+			//lights and geometries
+			pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK | (1 << RS::INSTANCE_LIGHT);
+			pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
 			pair.bvh2 = &p_instance->scenario->indexers[Scenario::INDEXER_VOLUMES];
-		}
-	} else if (p_instance->base_type == RS::INSTANCE_LIGHTMAP) {
-		pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK;
-		pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
-	} else if (geometry_instance_pair_mask & (1 << RS::INSTANCE_REFLECTION_PROBE) && (p_instance->base_type == RS::INSTANCE_REFLECTION_PROBE)) {
-		pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK;
-		pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
-	} else if (geometry_instance_pair_mask & (1 << RS::INSTANCE_DECAL) && (p_instance->base_type == RS::INSTANCE_DECAL)) {
-		pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK;
-		pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
-	} else if (p_instance->base_type == RS::INSTANCE_PARTICLES_COLLISION) {
-		pair.pair_mask = (1 << RS::INSTANCE_PARTICLES);
-		pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
-	} else if (p_instance->base_type == RS::INSTANCE_VOXEL_GI) {
-		//lights and geometries
-		pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK | (1 << RS::INSTANCE_LIGHT);
-		pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
-		pair.bvh2 = &p_instance->scenario->indexers[Scenario::INDEXER_VOLUMES];
+		} break;
+
+		case RS::INSTANCE_LIGHTMAP:
+		case RS::INSTANCE_PORTAL: {
+			pair.pair_mask = RS::INSTANCE_GEOMETRY_MASK;
+			pair.bvh = &p_instance->scenario->indexers[Scenario::INDEXER_GEOMETRY];
+		} break;
+
+		default: break;
 	}
 
 	pair.pair();
@@ -2068,6 +2184,11 @@ void RendererSceneCull::_update_instance_aabb(Instance *p_instance) const {
 			new_aabb = RSG::light_storage->lightmap_get_aabb(p_instance->base);
 
 		} break;
+
+		case RenderingServer::INSTANCE_PORTAL: {
+			new_aabb = RSG::portal_storage->portal_get_aabb(p_instance->base);
+		}
+
 		default: {
 		}
 	}
@@ -2742,14 +2863,31 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 #endif // XR_DISABLED
 	}
 
-	RID environment = _render_get_environment(p_camera, p_scenario);
+	bool force_environment;
+	RID environment = _render_get_environment(p_camera, p_scenario, &force_environment);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);
 
 	RENDER_TIMESTAMP("Update Occlusion Buffer")
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.shadow_projection, camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	_render_scene(
+		&camera_data,
+		p_render_buffers,
+		environment,
+		camera->attributes,
+		compositor,
+		camera->visible_layers,
+		p_scenario,
+		p_viewport,
+		p_shadow_atlas,
+		RID(),
+		-1,
+		p_screen_mesh_lod_threshold,
+		true,
+		force_environment,
+		r_render_info
+	);
 #endif
 }
 
@@ -2841,12 +2979,32 @@ int RendererSceneCull::_visibility_range_check(InstanceVisibilityData &r_vis_dat
 	}
 }
 
-bool RendererSceneCull::_visibility_parent_check(const CullData &p_cull_data, const InstanceData &p_instance_data) {
+bool RendererSceneCull::_visibility_parent_check(const Scenario *p_scenario, const InstanceData &p_instance_data) {
 	if (p_instance_data.parent_array_index == -1) {
 		return true;
 	}
-	const uint32_t &parent_flags = p_cull_data.scenario->instance_data[p_instance_data.parent_array_index].flags;
+	const uint32_t &parent_flags = p_scenario->instance_data[p_instance_data.parent_array_index].flags;
 	return ((parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_NEEDS_CHECK) == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE) || (parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN);
+}
+
+// Visibility check without relying on visibility state flags (This is needed for portal culling)
+bool RendererSceneCull::_visibility_check(Scenario *p_scenario, const InstanceData &p_idata, const Transform3D &p_cam_transform, uint64_t p_visibility_viewport_mask) {
+	bool result =
+		p_idata.visibility_index == -1 ||
+		p_scenario->instance_visibility[p_idata.visibility_index].fade_mode == RS::VISIBILITY_RANGE_FADE_DISABLED ||
+		_visibility_range_check<false>(
+			p_scenario->instance_visibility[p_idata.visibility_index],
+			p_cam_transform.origin,
+			p_visibility_viewport_mask) == 0;
+	if (result && p_idata.parent_array_index != -1) {
+		result = result && _visibility_check(
+			p_scenario,
+			p_scenario->instance_data[p_idata.parent_array_index],
+			p_cam_transform,
+			p_visibility_viewport_mask
+		);
+	}
+	return result;
 }
 
 void RendererSceneCull::_scene_cull_threaded(uint32_t p_thread, CullData *cull_data) {
@@ -2865,6 +3023,9 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	uint32_t sdfgi_last_light_index = 0xFFFFFFFF;
 	uint32_t sdfgi_last_light_cascade = 0xFFFFFFFF;
 
+	int portal_count = cull_data.portal_cull ? cull_data.portal_cull->portals.size() + 1 : 1;
+	PortalMaskData *last_mask = nullptr;
+
 	RID instance_pair_buffer[MAX_INSTANCE_PAIRS];
 
 	Transform3D inv_cam_transform = cull_data.cam_transform.inverse();
@@ -2879,24 +3040,217 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 		int32_t visibility_check = -1;
 
 #define HIDDEN_BY_VISIBILITY_CHECKS (visibility_flags == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE || visibility_flags == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN)
-#define LAYER_CHECK (cull_data.visible_layers & idata.layer_mask)
+#define LAYER_CHECK (visible_layers & idata.layer_mask)
 #define IN_FRUSTUM(f) (cull_data.scenario->instance_aabbs[i].in_frustum(f))
 #define VIS_RANGE_CHECK ((idata.visibility_index == -1) || _visibility_range_check<false>(cull_data.scenario->instance_visibility[idata.visibility_index], cull_data.cam_transform.origin, cull_data.visibility_viewport_mask) == 0)
-#define VIS_PARENT_CHECK (_visibility_parent_check(cull_data, idata))
+#define VIS_PARENT_CHECK (_visibility_parent_check(cull_data.scenario, idata))
 #define VIS_CHECK (visibility_check < 0 ? (visibility_check = (visibility_flags != InstanceData::FLAG_VISIBILITY_DEPENDENCY_NEEDS_CHECK || (VIS_RANGE_CHECK && VIS_PARENT_CHECK))) : visibility_check)
 #define OCCLUSION_CULLED (cull_data.occlusion_buffer != nullptr && (cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_IGNORE_OCCLUSION_CULLING) == 0 && cull_data.occlusion_buffer->is_occluded(cull_data.scenario->instance_aabbs[i].bounds, cull_data.cam_transform.origin, inv_cam_transform, *cull_data.camera_matrix, z_near, is_orthogonal, cull_data.scenario->instance_data[i].occlusion_timeout))
 
-		if (!HIDDEN_BY_VISIBILITY_CHECKS) {
-			if ((LAYER_CHECK && IN_FRUSTUM(cull_data.cull->frustum) && VIS_CHECK && !OCCLUSION_CULLED) || (cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_IGNORE_ALL_CULLING)) {
-				uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
-				if (base_type == RS::INSTANCE_LIGHT) {
+		bool pass = false;
+		PortalMaskData portal_mask;
+
+		for (int j = cull_data.main_scenario ? 0 : 1; j < portal_count; j++) {
+			if (j == 0) {
+				// Root camera (normal cull)
+				if (!HIDDEN_BY_VISIBILITY_CHECKS) {
+					const uint32_t visible_layers = cull_data.visible_layers;
+					if ((idata.flags & InstanceData::FLAG_IGNORE_ALL_CULLING) ||
+						(LAYER_CHECK && IN_FRUSTUM(cull_data.cull->frustum) && VIS_CHECK && !OCCLUSION_CULLED))
+					{
+						if (portal_count > 1) {
+							portal_mask.set_portal(0);
+						}
+						pass = true;
+					}
+				}
+			}
+			else if (j > 0) {
+				// Portal cull
+				const PortalRenderInfo &portal = cull_data.portal_cull->portals[j-1];
+				const PortalCullInfo &cull_portal = cull_data.portal_cull->cull_portals[j-1];
+
+				if (portal.scenario != cull_data.scenario->self) {
+					// Not in this scenario
+					continue;
+				}
+				
+				// Forced to always check visibility for instances in portals
+				if (_visibility_check(cull_data.scenario, idata, portal.cam_transform, cull_data.visibility_viewport_mask)) {
+					visibility_check = 1;
+					const uint32_t visible_layers = portal.get_cull_mask(cull_data.portal_cull->portals, cull_data.visible_layers);
+					if ((idata.flags & InstanceData::FLAG_IGNORE_ALL_CULLING) ||
+						(LAYER_CHECK && cull_portal.visible_in_portal(cull_data.scenario->instance_aabbs[i])))
+					{
+						portal_mask.set_portal(j);
+						pass = true;
+					}
+				}
+			}
+		}
+
+		// Store portal mask
+		if (portal_count > 1) {
+			if (last_mask == nullptr || *last_mask != portal_mask) {
+				// Store new mask
+				last_mask = cull_result.portal_masks.push_unordered(portal_mask);
+			}
+			idata.portal_mask = last_mask;
+		} else {
+			idata.portal_mask = nullptr;
+		}
+
+		if (pass) {
+			uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
+
+			if (((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK) && !(idata.flags & InstanceData::FLAG_CAST_SHADOWS_ONLY)) {
+				bool keep = true;
+
+				if (idata.flags & InstanceData::FLAG_REDRAW_IF_VISIBLE) {
+					RenderingServerDefault::redraw_request();
+				}
+
+				if (base_type == RS::INSTANCE_MESH) {
+					mesh_visible = true;
+				} else if (base_type == RS::INSTANCE_PARTICLES) {
+					//particles visible? process them
+					if (RSG::particles_storage->particles_is_inactive(idata.base_rid)) {
+						//but if nothing is going on, don't do it.
+						keep = false;
+					} else {
+						cull_data.cull->lock.lock();
+						RSG::particles_storage->particles_request_process(idata.base_rid);
+						cull_data.cull->lock.unlock();
+
+						RS::get_singleton()->call_on_render_thread(callable_mp_static(&RendererSceneCull::_scene_particles_set_view_axis).bind(idata.base_rid, -cull_data.cam_transform.basis.get_column(2).normalized(), cull_data.cam_transform.basis.get_column(1).normalized()));
+						//particles visible? request redraw
+						RenderingServerDefault::redraw_request();
+					}
+				}
+
+				if (idata.parent_array_index >= 0) {
+					float fade = 1.0f;
+					const uint32_t &parent_flags = cull_data.scenario->instance_data[idata.parent_array_index].flags;
+					if (parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN) {
+						const int32_t &parent_idx = cull_data.scenario->instance_data[idata.parent_array_index].visibility_index;
+						fade = cull_data.scenario->instance_visibility[parent_idx].children_fade_alpha;
+					}
+					idata.instance_geometry->set_parent_fade_alpha(fade);
+				}
+
+				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
+				ERR_FAIL_NULL(geom->geometry_instance);
+
+				if (geometry_instance_pair_mask & (1 << RS::INSTANCE_LIGHT) && (idata.flags & InstanceData::FLAG_GEOM_LIGHTING_DIRTY)) {
+					uint32_t idx = 0;
+
+					for (const Instance *E : geom->lights) {
+						InstanceLightData *light = static_cast<InstanceLightData *>(E->base_data);
+						if (!(RSG::light_storage->light_get_cull_mask(E->base) & idata.layer_mask)) {
+							continue;
+						}
+
+						if ((RSG::light_storage->light_get_bake_mode(E->base) == RS::LIGHT_BAKE_STATIC) && idata.instance->lightmap) {
+							continue;
+						}
+
+						instance_pair_buffer[idx++] = light->instance;
+						if (idx == MAX_INSTANCE_PAIRS) {
+							break;
+						}
+					}
+
+					geom->geometry_instance->pair_light_instances(instance_pair_buffer, idx);
+					idata.flags &= ~InstanceData::FLAG_GEOM_LIGHTING_DIRTY;
+				}
+
+				if (idata.flags & InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY) {
+					cull_data.cull->lock.lock();
+					geom->geometry_instance->set_softshadow_projector_pairing(geom->softshadow_count > 0, geom->projector_count > 0);
+					cull_data.cull->lock.unlock();
+					idata.flags &= ~InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY;
+				}
+
+				if (geometry_instance_pair_mask & (1 << RS::INSTANCE_REFLECTION_PROBE) && (idata.flags & InstanceData::FLAG_GEOM_REFLECTION_DIRTY)) {
+					uint32_t idx = 0;
+
+					for (const Instance *E : geom->reflection_probes) {
+						InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(E->base_data);
+
+						instance_pair_buffer[idx++] = reflection_probe->instance;
+						if (idx == MAX_INSTANCE_PAIRS) {
+							break;
+						}
+					}
+
+					geom->geometry_instance->pair_reflection_probe_instances(instance_pair_buffer, idx);
+					idata.flags &= ~InstanceData::FLAG_GEOM_REFLECTION_DIRTY;
+				}
+
+				if (geometry_instance_pair_mask & (1 << RS::INSTANCE_DECAL) && (idata.flags & InstanceData::FLAG_GEOM_DECAL_DIRTY)) {
+					uint32_t idx = 0;
+
+					for (const Instance *E : geom->decals) {
+						InstanceDecalData *decal = static_cast<InstanceDecalData *>(E->base_data);
+
+						instance_pair_buffer[idx++] = decal->instance;
+						if (idx == MAX_INSTANCE_PAIRS) {
+							break;
+						}
+					}
+
+					geom->geometry_instance->pair_decal_instances(instance_pair_buffer, idx);
+
+					idata.flags &= ~InstanceData::FLAG_GEOM_DECAL_DIRTY;
+				}
+
+				if (idata.flags & InstanceData::FLAG_GEOM_VOXEL_GI_DIRTY) {
+					uint32_t idx = 0;
+					for (const Instance *E : geom->voxel_gi_instances) {
+						InstanceVoxelGIData *voxel_gi = static_cast<InstanceVoxelGIData *>(E->base_data);
+
+						instance_pair_buffer[idx++] = voxel_gi->probe_instance;
+						if (idx == MAX_INSTANCE_PAIRS) {
+							break;
+						}
+					}
+
+					geom->geometry_instance->pair_voxel_gi_instances(instance_pair_buffer, idx);
+
+					idata.flags &= ~InstanceData::FLAG_GEOM_VOXEL_GI_DIRTY;
+				}
+
+				if ((idata.flags & InstanceData::FLAG_LIGHTMAP_CAPTURE) && idata.instance->last_frame_pass != frame_number && !idata.instance->lightmap_target_sh.is_empty() && !idata.instance->lightmap_sh.is_empty()) {
+					Color *sh = idata.instance->lightmap_sh.ptrw();
+					const Color *target_sh = idata.instance->lightmap_target_sh.ptr();
+					for (uint32_t j = 0; j < 9; j++) {
+						sh[j] = sh[j].lerp(target_sh[j], MIN(1.0, lightmap_probe_update_speed));
+					}
+					cull_data.cull->lock.lock();
+					geom->geometry_instance->set_lightmap_capture(sh);
+					cull_data.cull->lock.unlock();
+					idata.instance->last_frame_pass = frame_number;
+				}
+
+				geom->geometry_instance->assign_portal_mask(idata.portal_mask);
+
+				if (keep) {
+					cull_result.geometry_instances.push_back(idata.instance_geometry);
+				}
+			}
+			else switch (base_type) {
+				// Lights
+				case RS::INSTANCE_LIGHT: {
 					cull_result.lights.push_back(idata.instance);
 					cull_result.light_instances.push_back(RID::from_uint64(idata.instance_data_rid));
+					RSG::light_storage->light_instance_set_portal_mask(RID::from_uint64(idata.instance_data_rid), idata.portal_mask);
 					if (cull_data.shadow_atlas.is_valid() && RSG::light_storage->light_has_shadow(idata.base_rid)) {
 						RSG::light_storage->light_instance_mark_visible(RID::from_uint64(idata.instance_data_rid)); //mark it visible for shadow allocation later
 					}
+				} break;
 
-				} else if (base_type == RS::INSTANCE_REFLECTION_PROBE) {
+				// Reflection probes
+				case RS::INSTANCE_REFLECTION_PROBE: {
 					if (cull_data.render_reflection_probe != idata.instance) {
 						//avoid entering The Matrix
 
@@ -2913,13 +3267,19 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						}
 
 						if (RSG::light_storage->reflection_probe_instance_has_reflection(RID::from_uint64(idata.instance_data_rid))) {
+							RSG::light_storage->reflection_probe_instance_set_portal_mask(RID::from_uint64(idata.instance_data_rid), idata.portal_mask);
 							cull_result.reflections.push_back(RID::from_uint64(idata.instance_data_rid));
 						}
 					}
-				} else if (base_type == RS::INSTANCE_DECAL) {
-					cull_result.decals.push_back(RID::from_uint64(idata.instance_data_rid));
+				} break;
 
-				} else if (base_type == RS::INSTANCE_VOXEL_GI) {
+				// Decals
+				case RS::INSTANCE_DECAL: {
+					cull_result.decals.push_back(RID::from_uint64(idata.instance_data_rid));
+				} break;
+
+				// VoxelGIs
+				case RS::INSTANCE_VOXEL_GI: {
 					InstanceVoxelGIData *voxel_gi = static_cast<InstanceVoxelGIData *>(idata.instance->base_data);
 					cull_data.cull->lock.lock();
 					if (!voxel_gi->update_element.in_list()) {
@@ -2927,12 +3287,20 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 					}
 					cull_data.cull->lock.unlock();
 					cull_result.voxel_gi_instances.push_back(RID::from_uint64(idata.instance_data_rid));
+				} break;
 
-				} else if (base_type == RS::INSTANCE_LIGHTMAP) {
+				// Lightmaps
+				case RS::INSTANCE_LIGHTMAP: {
 					cull_result.lightmaps.push_back(RID::from_uint64(idata.instance_data_rid));
-				} else if (base_type == RS::INSTANCE_FOG_VOLUME) {
+				} break;
+
+				// Fog volumes
+				case RS::INSTANCE_FOG_VOLUME: {
 					cull_result.fog_volumes.push_back(RID::from_uint64(idata.instance_data_rid));
-				} else if (base_type == RS::INSTANCE_VISIBLITY_NOTIFIER) {
+				} break;
+
+				// Visibility notifier
+				case RS::INSTANCE_VISIBLITY_NOTIFIER: {
 					InstanceVisibilityNotifierData *vnd = idata.visibility_notifier;
 					if (!vnd->list_element.in_list()) {
 						visible_notifier_list_lock.lock();
@@ -2941,163 +3309,23 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						vnd->just_visible = true;
 					}
 					vnd->visible_in_frame = RSG::rasterizer->get_frame_number();
-				} else if (((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK) && !(idata.flags & InstanceData::FLAG_CAST_SHADOWS_ONLY)) {
-					bool keep = true;
-
-					if (idata.flags & InstanceData::FLAG_REDRAW_IF_VISIBLE) {
-						RenderingServerDefault::redraw_request();
-					}
-
-					if (base_type == RS::INSTANCE_MESH) {
-						mesh_visible = true;
-					} else if (base_type == RS::INSTANCE_PARTICLES) {
-						//particles visible? process them
-						if (RSG::particles_storage->particles_is_inactive(idata.base_rid)) {
-							//but if nothing is going on, don't do it.
-							keep = false;
-						} else {
-							cull_data.cull->lock.lock();
-							RSG::particles_storage->particles_request_process(idata.base_rid);
-							cull_data.cull->lock.unlock();
-
-							RS::get_singleton()->call_on_render_thread(callable_mp_static(&RendererSceneCull::_scene_particles_set_view_axis).bind(idata.base_rid, -cull_data.cam_transform.basis.get_column(2).normalized(), cull_data.cam_transform.basis.get_column(1).normalized()));
-							//particles visible? request redraw
-							RenderingServerDefault::redraw_request();
-						}
-					}
-
-					if (idata.parent_array_index != -1) {
-						float fade = 1.0f;
-						const uint32_t &parent_flags = cull_data.scenario->instance_data[idata.parent_array_index].flags;
-						if (parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN) {
-							const int32_t &parent_idx = cull_data.scenario->instance_data[idata.parent_array_index].visibility_index;
-							fade = cull_data.scenario->instance_visibility[parent_idx].children_fade_alpha;
-						}
-						idata.instance_geometry->set_parent_fade_alpha(fade);
-					}
-
-					if (geometry_instance_pair_mask & (1 << RS::INSTANCE_LIGHT) && (idata.flags & InstanceData::FLAG_GEOM_LIGHTING_DIRTY)) {
-						InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
-						uint32_t idx = 0;
-
-						for (const Instance *E : geom->lights) {
-							InstanceLightData *light = static_cast<InstanceLightData *>(E->base_data);
-							if (!(RSG::light_storage->light_get_cull_mask(E->base) & idata.layer_mask)) {
-								continue;
-							}
-
-							if ((RSG::light_storage->light_get_bake_mode(E->base) == RS::LIGHT_BAKE_STATIC) && idata.instance->lightmap) {
-								continue;
-							}
-
-							instance_pair_buffer[idx++] = light->instance;
-							if (idx == MAX_INSTANCE_PAIRS) {
-								break;
-							}
-						}
-
-						ERR_FAIL_NULL(geom->geometry_instance);
-						geom->geometry_instance->pair_light_instances(instance_pair_buffer, idx);
-						idata.flags &= ~InstanceData::FLAG_GEOM_LIGHTING_DIRTY;
-					}
-
-					if (idata.flags & InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY) {
-						InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
-
-						ERR_FAIL_NULL(geom->geometry_instance);
-						cull_data.cull->lock.lock();
-						geom->geometry_instance->set_softshadow_projector_pairing(geom->softshadow_count > 0, geom->projector_count > 0);
-						cull_data.cull->lock.unlock();
-						idata.flags &= ~InstanceData::FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY;
-					}
-
-					if (geometry_instance_pair_mask & (1 << RS::INSTANCE_REFLECTION_PROBE) && (idata.flags & InstanceData::FLAG_GEOM_REFLECTION_DIRTY)) {
-						InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
-						uint32_t idx = 0;
-
-						for (const Instance *E : geom->reflection_probes) {
-							InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(E->base_data);
-
-							instance_pair_buffer[idx++] = reflection_probe->instance;
-							if (idx == MAX_INSTANCE_PAIRS) {
-								break;
-							}
-						}
-
-						ERR_FAIL_NULL(geom->geometry_instance);
-						geom->geometry_instance->pair_reflection_probe_instances(instance_pair_buffer, idx);
-						idata.flags &= ~InstanceData::FLAG_GEOM_REFLECTION_DIRTY;
-					}
-
-					if (geometry_instance_pair_mask & (1 << RS::INSTANCE_DECAL) && (idata.flags & InstanceData::FLAG_GEOM_DECAL_DIRTY)) {
-						InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
-						uint32_t idx = 0;
-
-						for (const Instance *E : geom->decals) {
-							InstanceDecalData *decal = static_cast<InstanceDecalData *>(E->base_data);
-
-							instance_pair_buffer[idx++] = decal->instance;
-							if (idx == MAX_INSTANCE_PAIRS) {
-								break;
-							}
-						}
-
-						ERR_FAIL_NULL(geom->geometry_instance);
-						geom->geometry_instance->pair_decal_instances(instance_pair_buffer, idx);
-
-						idata.flags &= ~InstanceData::FLAG_GEOM_DECAL_DIRTY;
-					}
-
-					if (idata.flags & InstanceData::FLAG_GEOM_VOXEL_GI_DIRTY) {
-						InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
-						uint32_t idx = 0;
-						for (const Instance *E : geom->voxel_gi_instances) {
-							InstanceVoxelGIData *voxel_gi = static_cast<InstanceVoxelGIData *>(E->base_data);
-
-							instance_pair_buffer[idx++] = voxel_gi->probe_instance;
-							if (idx == MAX_INSTANCE_PAIRS) {
-								break;
-							}
-						}
-
-						ERR_FAIL_NULL(geom->geometry_instance);
-						geom->geometry_instance->pair_voxel_gi_instances(instance_pair_buffer, idx);
-
-						idata.flags &= ~InstanceData::FLAG_GEOM_VOXEL_GI_DIRTY;
-					}
-
-					if ((idata.flags & InstanceData::FLAG_LIGHTMAP_CAPTURE) && idata.instance->last_frame_pass != frame_number && !idata.instance->lightmap_target_sh.is_empty() && !idata.instance->lightmap_sh.is_empty()) {
-						InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
-						Color *sh = idata.instance->lightmap_sh.ptrw();
-						const Color *target_sh = idata.instance->lightmap_target_sh.ptr();
-						for (uint32_t j = 0; j < 9; j++) {
-							sh[j] = sh[j].lerp(target_sh[j], MIN(1.0, lightmap_probe_update_speed));
-						}
-						ERR_FAIL_NULL(geom->geometry_instance);
-						cull_data.cull->lock.lock();
-						geom->geometry_instance->set_lightmap_capture(sh);
-						cull_data.cull->lock.unlock();
-						idata.instance->last_frame_pass = frame_number;
-					}
-
-					if (keep) {
-						cull_result.geometry_instances.push_back(idata.instance_geometry);
-					}
-				}
+				} break;
 			}
+		}
 
-			for (uint32_t j = 0; j < cull_data.cull->shadow_count; j++) {
-				if (!light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j)) {
-					continue;
-				}
-				for (uint32_t k = 0; k < cull_data.cull->shadows[j].cascade_count; k++) {
-					if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && VIS_CHECK) {
-						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
+		// TODO: Make sure we account for custom portal cull masks, or just portals in general
+		const uint32_t visible_layers = cull_data.visible_layers;
+		for (uint32_t j = 0; j < cull_data.cull->shadow_count; j++) {
+			if (!light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j)) {
+				continue;
+			}
+			for (uint32_t k = 0; k < cull_data.cull->shadows[j].cascade_count; k++) {
+				if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && VIS_CHECK) {
+					uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 
-						if (((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
-							cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
-							mesh_visible = true;
-						}
+					if (((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
+						cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
+						mesh_visible = true;
 					}
 				}
 			}
@@ -3133,9 +3361,147 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 			}
 		}
 
-		if (mesh_visible && cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_USES_MESH_INSTANCE) {
-			cull_result.mesh_instances.push_back(cull_data.scenario->instance_data[i].instance->mesh_instance);
+		if (mesh_visible && idata.flags & InstanceData::FLAG_USES_MESH_INSTANCE) {
+			cull_result.mesh_instances.push_back(idata.instance->mesh_instance);
 		}
+	}
+}
+
+void RendererSceneCull::_portal_cull(CullData &cull_data) {
+	if (cull_data.portal_cull == nullptr || cull_data.cull == nullptr) {
+		return;
+	}
+
+	PortalCull &portal_cull = *cull_data.portal_cull;
+	RendererPortalStorage *portal_storage = RSG::portal_storage;
+	const Projection &cam_projection = *cull_data.camera_matrix;
+
+	PortalRenderInfo *this_portal = nullptr;
+	PortalCullInfo *cull_portal = nullptr;
+	Scenario *scenario = cull_data.scenario;
+	const Transform3D *cam_transform = &cull_data.cam_transform;
+	uint32_t visible_layers = cull_data.visible_layers;
+
+	uint32_t max_portals = MIN((uint32_t)GLOBAL_GET("rendering/portals/max_portal_count"), (uint32_t)MAX_RENDERABLE_PORTALS);
+
+	// Stack-based approach, because it's optimal if siblings have indices sequential from their parent,
+	// due to how drawing the portal stencils works (we are forced to draw portals multiple times to increment
+	// the stencil buffer value by one, but at least it can all be done in a single draw call.)
+
+	for (uint32_t i = 0; i <= portal_cull.portals.size() && i <= max_portals; i++) {
+
+		if (i > 0) {
+			this_portal = &portal_cull.portals.ptrw()[i-1];
+			cull_portal = &portal_cull.cull_portals.ptrw()[i-1];
+
+			// Obtain info
+			scenario = scenario_owner.get_or_null(this_portal->scenario);
+			cam_transform = &this_portal->cam_transform;
+			visible_layers = this_portal->get_cull_mask(portal_cull.portals, cull_data.visible_layers);
+			if (!scenario) {
+				WARN_PRINT("Portal scenario is invalid!");
+				continue;
+			}
+
+			int recursive_depth = portal_storage->portal_get_max_recursive_depth(this_portal->portal);
+			if (this_portal->depth >= recursive_depth) {
+				// We're at the recursive depth of this portal
+				continue;
+			}
+		}
+		
+		for (Instance *visual_instance : scenario->portals) {
+			if (portal_cull.portals.size() >= max_portals) {
+				// We cannot render any more portals
+				break;
+			}
+
+			InstancePortalData *portal_data = static_cast<InstancePortalData *>(visual_instance->base_data);
+			int vis_index = visual_instance->array_index;
+			
+			if (vis_index < 0) {
+				continue;
+			}
+
+			if (this_portal && portal_data->portal.is_valid() && this_portal->partner_portal == portal_data->portal) {
+				// This is the partner, ignore it
+				continue;
+			}
+
+			InstanceData &idata = scenario->instance_data[vis_index];
+
+			/* Cull check */
+
+			if ((idata.flags & InstanceData::FLAG_IGNORE_ALL_CULLING) == 0) {
+				if (// Layer check
+					(visible_layers & visual_instance->layer_mask) == 0 ||
+					// Visibility check
+					!_visibility_check(scenario, idata, *cam_transform, cull_data.visibility_viewport_mask))
+				{
+					continue;
+				}
+
+				if (// Portal frustum
+					(cull_portal && !cull_portal->visible_in_portal(scenario->instance_aabbs[vis_index])) ||
+					// Main frustum
+					(!cull_portal && !scenario->instance_aabbs[vis_index].in_frustum(cull_data.cull->frustum))) {
+					continue;
+				}
+			}
+
+			/* Create portal info */
+
+			PortalRenderInfo info = portal_storage->portal_instance_make_render_info(portal_data->instance, *cam_transform, cam_projection);
+
+			if (portal_data->portal != info.portal) {
+				portal_data->portal = info.portal;
+				if (this_portal && info.portal == this_portal->partner_portal) {
+					continue;
+				}
+			}
+
+			if (!info.front_facing) {
+				// We can't see this portal, skip it
+				continue;
+			}
+			
+			if (info.scenario.is_null()) {
+				info.scenario = scenario->self;
+			}
+
+			if (portal_cull.force_environment) {
+				info.environment = portal_cull.environment;
+			} else if (info.environment.is_null()) {
+				info.environment = _render_get_environment(RID(), info.scenario);
+			}
+
+			info.index = portal_cull.portals.size() + 1; // Add one because index 0 is always the root camera (no portal)
+			info.parent_index = this_portal ? this_portal->index : 0;
+			info.depth = this_portal ? this_portal->depth + 1 : 1;
+
+			/* Create cull info */
+
+			PortalCullInfo cull_info;
+			cull_info.generate_planes(info, cam_projection);
+
+			/* Push portal */
+
+			portal_cull.portals.push_back(info);
+			portal_cull.cull_portals.push_back(cull_info);
+
+			if (i > 0) {
+				// Ensure our pointers are valid
+				this_portal = &portal_cull.portals.ptrw()[i-1];
+				cull_portal = &portal_cull.cull_portals.ptrw()[i-1];
+				cam_transform = &this_portal->cam_transform;
+
+				// Set our first child if we haven't already
+				if (this_portal->first_child < 0) {
+					this_portal->first_child = info.index;
+				}
+			}
+		}
+
 	}
 }
 
@@ -3143,11 +3509,8 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 	RSG::particles_storage->particles_set_view_axis(p_particles, p_axis, p_up_axis);
 }
 
-void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, bool p_force_environment, RenderingMethod::RenderInfo *r_render_info) {
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
-
-	// Prepare the light - camera volume culling system.
-	light_culler->prepare_camera(p_camera_data->main_transform, p_camera_data->shadow_projection);
 
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
@@ -3199,45 +3562,6 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	/* STEP 2 - CULL */
 
-	Vector<Plane> planes = p_camera_data->shadow_projection.get_projection_planes(p_camera_data->main_transform);
-	cull.frustum = Frustum(planes);
-
-	Vector<RID> directional_lights;
-	// directional lights
-	{
-		cull.shadow_count = 0;
-
-		Vector<Instance *> lights_with_shadow;
-
-		for (Instance *E : scenario->directional_lights) {
-			if (!E->visible || !(E->layer_mask & p_visible_layers)) {
-				continue;
-			}
-
-			if (directional_lights.size() >= RendererSceneRender::MAX_DIRECTIONAL_LIGHTS) {
-				break;
-			}
-
-			InstanceLightData *light = static_cast<InstanceLightData *>(E->base_data);
-
-			//check shadow..
-
-			if (light) {
-				if (p_using_shadows && p_shadow_atlas.is_valid() && RSG::light_storage->light_has_shadow(E->base) && !(RSG::light_storage->light_get_type(E->base) == RS::LIGHT_DIRECTIONAL && RSG::light_storage->light_directional_get_sky_mode(E->base) == RS::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY)) {
-					lights_with_shadow.push_back(E);
-				}
-				//add to list
-				directional_lights.push_back(light->instance);
-			}
-		}
-
-		RSG::light_storage->set_directional_shadow_count(lights_with_shadow.size());
-
-		for (int i = 0; i < lights_with_shadow.size(); i++) {
-			_light_instance_setup_directional_shadow(i, lights_with_shadow[i], p_camera_data->main_transform, p_camera_data->shadow_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect);
-		}
-	}
-
 	{ //sdfgi
 		cull.sdfgi.region_count = 0;
 
@@ -3265,14 +3589,21 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	scene_cull_result.clear();
 
-	{
-		uint64_t cull_from = 0;
-		uint64_t cull_to = scenario->instance_data.size();
+	Vector<Plane> planes = p_camera_data->shadow_projection.get_projection_planes(p_camera_data->main_transform);
+	cull.frustum = Frustum(planes);
 
+	PortalCull portal_cull;
+	portal_cull.environment = p_environment;
+	portal_cull.force_environment = p_force_environment;
+
+	Vector<RID> directional_lights;
+
+	{
 		CullData cull_data;
 
 		//prepare for eventual thread usage
 		cull_data.cull = &cull;
+		cull_data.portal_cull = &portal_cull;
 		cull_data.scenario = scenario;
 		cull_data.shadow_atlas = p_shadow_atlas;
 		cull_data.cam_transform = p_camera_data->main_transform;
@@ -3285,6 +3616,52 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 #ifdef DEBUG_CULL_TIME
 		uint64_t time_from = OS::get_singleton()->get_ticks_usec();
 #endif
+
+		// Portals must be culled before anything else
+		if (scenario->portals.size() > 0) {
+			_portal_cull(cull_data);
+		}
+
+		// Prepare the light - camera volume culling system.
+		light_culler->prepare_camera(p_camera_data->main_transform, p_camera_data->shadow_projection, portal_cull.portals);
+
+		// directional lights
+		{
+			cull.shadow_count = 0;
+
+			Vector<Instance *> lights_with_shadow;
+
+			for (Instance *E : scenario->directional_lights) {
+				if (!E->visible || !(E->layer_mask & p_visible_layers)) {
+					continue;
+				}
+
+				if (directional_lights.size() >= RendererSceneRender::MAX_DIRECTIONAL_LIGHTS) {
+					break;
+				}
+
+				InstanceLightData *light = static_cast<InstanceLightData *>(E->base_data);
+
+				//check shadow..
+
+				if (light) {
+					if (p_using_shadows && p_shadow_atlas.is_valid() && RSG::light_storage->light_has_shadow(E->base) && !(RSG::light_storage->light_get_type(E->base) == RS::LIGHT_DIRECTIONAL && RSG::light_storage->light_directional_get_sky_mode(E->base) == RS::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY)) {
+						lights_with_shadow.push_back(E);
+					}
+					//add to list
+					directional_lights.push_back(light->instance);
+				}
+			}
+
+			RSG::light_storage->set_directional_shadow_count(lights_with_shadow.size());
+
+			for (int i = 0; i < lights_with_shadow.size(); i++) {
+				_light_instance_setup_directional_shadow(i, lights_with_shadow[i], p_camera_data->main_transform, p_camera_data->shadow_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect);
+			}
+		}
+
+		uint64_t cull_from = 0;
+		uint64_t cull_to = scenario->instance_data.size();
 
 		if (cull_to > thread_cull_threshold) {
 			//multiple threads
@@ -3304,6 +3681,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			_scene_cull(cull_data, scene_cull_result, cull_from, cull_to);
 		}
 
+		// TODO: For each unique scenario we are rendering (via portals), we need to cull them separately
+
 #ifdef DEBUG_CULL_TIME
 		static float time_avg = 0;
 		static uint32_t time_count = 0;
@@ -3319,7 +3698,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			RSG::mesh_storage->update_mesh_instances();
 		}
 	}
-
+	
 	//render shadows
 
 	max_shadows_used = 0;
@@ -3530,7 +3909,34 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(
+		p_render_buffers,
+		p_camera_data,
+		prev_camera_data,
+		scene_cull_result.geometry_instances,
+		scene_cull_result.light_instances,
+		scene_cull_result.reflections,
+		scene_cull_result.voxel_gi_instances,
+		scene_cull_result.decals,
+		scene_cull_result.lightmaps,
+		scene_cull_result.fog_volumes,
+		p_environment,
+		camera_attributes,
+		p_compositor,
+		p_shadow_atlas,
+		occluders_tex,
+		p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas,
+		p_reflection_probe,
+		p_reflection_probe_pass,
+		p_screen_mesh_lod_threshold,
+		render_shadow_data,
+		max_shadows_used,
+		render_sdfgi_data,
+		cull.sdfgi.region_count,
+		&sdfgi_update_data,
+		r_render_info,
+		portal_cull.portals
+	);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
@@ -3546,10 +3952,17 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 }
 
-RID RendererSceneCull::_render_get_environment(RID p_camera, RID p_scenario) {
+RID RendererSceneCull::_render_get_environment(RID p_camera, RID p_scenario, bool *force_environment) {
 	Camera *camera = camera_owner.get_or_null(p_camera);
 	if (camera && scene_render->is_environment(camera->env)) {
+		if (force_environment) {
+			*force_environment = true;
+		}
 		return camera->env;
+	}
+
+	if (force_environment) {
+		*force_environment = false;
 	}
 
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
@@ -3597,7 +4010,32 @@ void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_rend
 	RendererSceneRender::CameraData camera_data;
 	camera_data.set_camera(Transform3D(), Projection(), Projection(), true, false, false);
 
-	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	scene_render->render_scene(
+		p_render_buffers,
+		&camera_data,
+		&camera_data,
+		PagedArray<RenderGeometryInstance *>(),
+		PagedArray<RID>(),
+		PagedArray<RID>(),
+		PagedArray<RID>(),
+		PagedArray<RID>(),
+		PagedArray<RID>(),
+		PagedArray<RID>(),
+		environment,
+		RID(),
+		compositor,
+		p_shadow_atlas,
+		RID(),
+		scenario->reflection_atlas,
+		RID(),
+		0,
+		0,
+		nullptr,
+		0,
+		nullptr,
+		0,
+		nullptr
+	);
 #endif
 }
 
@@ -3664,7 +4102,21 @@ bool RendererSceneCull::_render_reflection_probe_step(Instance *p_instance, int 
 			camera_data.set_camera(xform, cm, cm, false, false, false);
 
 			RENDER_TIMESTAMP("Render ReflectionProbe, Face " + itos(face));
-			_render_scene(&camera_data, render_buffers, environment, RID(), RID(), RSG::light_storage->reflection_probe_get_cull_mask(p_instance->base), p_instance->scenario->self, RID(), shadow_atlas, reflection_probe->instance, face, mesh_lod_threshold, use_shadows);
+			_render_scene(
+				&camera_data,
+				render_buffers,
+				environment,
+				RID(),
+				RID(),
+				RSG::light_storage->reflection_probe_get_cull_mask(p_instance->base),
+				p_instance->scenario->self,
+				RID(),
+				shadow_atlas,
+				reflection_probe->instance,
+				face,
+				mesh_lod_threshold,
+				use_shadows
+			);
 		}
 
 		RSG::light_storage->reflection_probe_instance_end_render(reflection_probe->instance, scenario->reflection_atlas);
@@ -4281,6 +4733,35 @@ void RendererSceneCull::update_visibility_notifiers() {
 	}
 }
 
+void RendererSceneCull::PortalCullInfo::generate_planes(const PortalRenderInfo &p_render_info, const Projection &p_cam_projection) {
+	const Transform3D &dest_transform = p_render_info.dest_transform;
+	AABB aabb = RSG::portal_storage->portal_get_aabb(p_render_info.portal);
+	Vector3 box_min = aabb.position;
+	Vector3 box_max = aabb.get_end();
+	
+	// Only basis transform for extra precision
+	Vector3 points[4];
+	points[0] = dest_transform.basis.xform(Vector3(box_min.x, box_max.y, box_min.z));
+	points[1] = dest_transform.basis.xform(Vector3(box_min.x, box_min.y, box_min.z));
+	points[2] = dest_transform.basis.xform(Vector3(box_max.x, box_min.y, box_min.z));
+	points[3] = dest_transform.basis.xform(Vector3(box_max.x, box_max.y, box_min.z));
+
+	Vector3 eye = p_render_info.cam_transform.get_origin();
+	Vector3 local_eye = eye - dest_transform.origin;
+
+	planes[0] = Plane(points[0], points[1], points[2], points[0] + dest_transform.origin, COUNTERCLOCKWISE); // Near plane
+	planes[1] = Plane(points[0], points[1], local_eye, eye, COUNTERCLOCKWISE); // Left plane
+	planes[2] = Plane(points[2], points[3], local_eye, eye, COUNTERCLOCKWISE); // Right plane
+	planes[3] = Plane(points[1], points[2], local_eye, eye, COUNTERCLOCKWISE); // Bottom plane
+	planes[4] = Plane(points[3], points[0], local_eye, eye, COUNTERCLOCKWISE); // Top plane
+
+	for (int i = 0; i < 5; i++) {
+		signs[i] = PlaneSign(planes[i]);
+	}
+
+	frustum = Frustum(p_cam_projection.get_projection_planes(p_render_info.cam_transform));
+}
+
 /*******************************/
 /* Passthrough to Scene Render */
 /*******************************/
@@ -4324,10 +4805,10 @@ RendererSceneCull::RendererSceneCull() {
 		render_sdfgi_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
 	}
 
-	scene_cull_result.init(&rid_cull_page_pool, &geometry_instance_cull_page_pool, &instance_cull_page_pool);
+	scene_cull_result.init(&rid_cull_page_pool, &geometry_instance_cull_page_pool, &instance_cull_page_pool, &portal_masks_pool);
 	scene_cull_result_threads.resize(WorkerThreadPool::get_singleton()->get_thread_count());
 	for (InstanceCullResult &thread : scene_cull_result_threads) {
-		thread.init(&rid_cull_page_pool, &geometry_instance_cull_page_pool, &instance_cull_page_pool);
+		thread.init(&rid_cull_page_pool, &geometry_instance_cull_page_pool, &instance_cull_page_pool, &portal_masks_pool);
 	}
 
 	indexer_update_iterations = GLOBAL_GET("rendering/limits/spatial_indexer/update_iterations_per_frame");

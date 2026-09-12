@@ -36,6 +36,7 @@
 #include "../misc/jolt_stream_wrappers.h"
 #include "../objects/jolt_area_3d.h"
 #include "../objects/jolt_body_3d.h"
+#include "../objects/jolt_portal_3d.h"
 #include "../shapes/jolt_custom_shape_type.h"
 #include "../shapes/jolt_shape_3d.h"
 #include "jolt_body_activation_listener_3d.h"
@@ -230,6 +231,12 @@ void JoltSpace3D::call_queries() {
 		JoltArea3D *body = area_call_queries_list.first()->self();
 		area_call_queries_list.remove(area_call_queries_list.first());
 		body->call_queries();
+	}
+
+	while (portal_call_queries_list.first()) {
+		JoltPortal3D *portal = portal_call_queries_list.first()->self();
+		portal_call_queries_list.remove(portal_call_queries_list.first());
+		portal->call_queries();
 	}
 }
 
@@ -514,6 +521,12 @@ void JoltSpace3D::enqueue_call_queries(SelfList<JoltArea3D> *p_area) {
 	}
 }
 
+void JoltSpace3D::enqueue_call_queries(SelfList<JoltPortal3D> *p_portal) {
+	if (!p_portal->in_list()) {
+		portal_call_queries_list.add(p_portal);
+	}
+}
+
 void JoltSpace3D::dequeue_call_queries(SelfList<JoltBody3D> *p_body) {
 	if (p_body->in_list()) {
 		body_call_queries_list.remove(p_body);
@@ -523,6 +536,12 @@ void JoltSpace3D::dequeue_call_queries(SelfList<JoltBody3D> *p_body) {
 void JoltSpace3D::dequeue_call_queries(SelfList<JoltArea3D> *p_area) {
 	if (p_area->in_list()) {
 		area_call_queries_list.remove(p_area);
+	}
+}
+
+void JoltSpace3D::dequeue_call_queries(SelfList<JoltPortal3D> *p_portal) {
+	if (p_portal->in_list()) {
+		portal_call_queries_list.remove(p_portal);
 	}
 }
 

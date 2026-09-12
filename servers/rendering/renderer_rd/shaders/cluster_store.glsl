@@ -11,10 +11,13 @@ layout(push_constant, std430) uniform Params {
 	uint max_render_element_count_div_32; //divided by 32
 	uvec2 cluster_screen_size;
 	uint render_element_count_div_32; //divided by 32
-
 	uint max_cluster_element_count_div_32; //divided by 32
+	uint render_buffer_offset;
+	uint dest_buffer_offset;
+	uint element_buffer_offset;
 	uint pad1;
 	uint pad2;
+	uint pad3;
 }
 params;
 
@@ -53,7 +56,7 @@ void main() {
 
 	//base offset for this cluster
 	uint base_offset = (pos.x + params.cluster_screen_size.x * pos.y);
-	uint src_offset = base_offset * params.cluster_render_data_size;
+	uint src_offset = params.render_buffer_offset + base_offset * params.cluster_render_data_size;
 
 	uint render_element_offset = 0;
 
@@ -64,7 +67,8 @@ void main() {
 			//if bits exist, check the render_element
 			uint index_bit = findLSB(bits);
 			uint index = render_element_offset * 32 + index_bit;
-			uint type = render_elements.data[index].type;
+			uint element_index = params.element_buffer_offset + index;
+			uint type = render_elements.data[element_index].type;
 
 			uint z_range_offset = src_offset + params.max_render_element_count_div_32 + index;
 			uint z_range = cluster_render.data[z_range_offset];
@@ -75,18 +79,18 @@ void main() {
 				uint from_z = findLSB(z_range);
 				uint to_z = findMSB(z_range) + 1;
 
-				if (render_elements.data[index].touches_near) {
+				if (render_elements.data[element_index].touches_near) {
 					from_z = 0;
 				}
 
-				if (render_elements.data[index].touches_far) {
+				if (render_elements.data[element_index].touches_far) {
 					to_z = 32;
 				}
 
 				// find cluster offset in the buffer used for indexing in the renderer
-				uint dst_offset = (base_offset + type * (params.cluster_screen_size.x * params.cluster_screen_size.y)) * (params.max_cluster_element_count_div_32 + 32);
+				uint dst_offset = params.dest_buffer_offset + (base_offset + type * (params.cluster_screen_size.x * params.cluster_screen_size.y)) * (params.max_cluster_element_count_div_32 + 32);
 
-				uint orig_index = render_elements.data[index].original_index;
+				uint orig_index = render_elements.data[element_index].original_index;
 				//store this index in the Z slices by setting the relevant bit
 				for (uint i = from_z; i < to_z; i++) {
 					uint slice_ofs = dst_offset + params.max_cluster_element_count_div_32 + i;

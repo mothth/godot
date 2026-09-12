@@ -246,6 +246,7 @@ void RenderingServerDefault::_init() {
 	RSG::mesh_storage = RSG::rasterizer->get_mesh_storage();
 	RSG::particles_storage = RSG::rasterizer->get_particles_storage();
 	RSG::texture_storage = RSG::rasterizer->get_texture_storage();
+	RSG::portal_storage = RSG::rasterizer->get_portal_storage();
 	RSG::gi = RSG::rasterizer->get_gi();
 	RSG::fog = RSG::rasterizer->get_fog();
 	RSG::canvas_render = RSG::rasterizer->get_canvas();
@@ -302,6 +303,8 @@ uint64_t RenderingServerDefault::get_rendering_info(RenderingInfo p_info) {
 		return RSG::viewport->get_total_objects_drawn();
 	} else if (p_info == RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME) {
 		return RSG::viewport->get_total_primitives_drawn();
+	} if (p_info == RENDERING_INFO_TOTAL_PORTALS_IN_FRAME) {
+		return RSG::viewport->get_total_portals_drawn();
 	} else if (p_info == RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME) {
 		return RSG::viewport->get_total_draw_calls_used();
 	} else if (p_info == RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS) {

@@ -261,6 +261,7 @@ opts.Add(BoolVariable("disable_navigation_2d", "Disable 2D navigation features",
 opts.Add(BoolVariable("disable_navigation_3d", "Disable 3D navigation features", False))
 opts.Add(BoolVariable("disable_xr", "Disable XR nodes and server", False))
 opts.Add(BoolVariable("disable_overrides", "Disable project settings overrides (override.cfg)", False))
+opts.Add(BoolVariable("disable_mobile", "Disables the mobile renderer method", False))
 opts.Add(
     BoolVariable(
         "disable_path_overrides",
@@ -1063,6 +1064,8 @@ if env["disable_navigation_2d"]:
     env.Append(CPPDEFINES=["NAVIGATION_2D_DISABLED"])
 if env["disable_navigation_3d"]:
     env.Append(CPPDEFINES=["NAVIGATION_3D_DISABLED"])
+if env["disable_mobile"]:
+    env.Append(CPPDEFINES=["MOBILE_RENDERER_DISABLED"])
 if env["disable_xr"]:
     env.Append(CPPDEFINES=["XR_DISABLED"])
 if env["minizip"]:

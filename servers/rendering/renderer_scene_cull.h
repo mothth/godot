@@ -77,20 +77,26 @@ public:
 			ORTHOGONAL,
 			FRUSTUM
 		};
+
 		Type type;
 		float fov;
 		bool use_oblique_frustum;
 		bool adjust_clipspace;
+		bool vaspect;
+
 		Vector3 oblique_normal;
 		Vector3 oblique_position;
+
 		float oblique_offset;
 		float znear, zfar;
 		float size;
+
+		uint32_t visible_layers;
+
 		Vector3 clipspace_offset;
 		Vector3 clipspace_scale;
 		Vector2 offset;
-		uint32_t visible_layers;
-		bool vaspect;
+		
 		RID env;
 		RID attributes;
 		RID compositor;
@@ -107,6 +113,8 @@ public:
 			offset = Vector2();
 			vaspect = false;
 			use_oblique_frustum = false;
+			adjust_clipspace = false;
+			oblique_offset = 0.0f;
 		}
 	};
 
@@ -134,7 +142,7 @@ public:
 	virtual RID occluder_allocate();
 	virtual void occluder_initialize(RID p_occluder);
 	virtual void occluder_set_mesh(RID p_occluder, const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices);
-
+	
 	/* VISIBILITY NOTIFIER API */
 
 	RendererSceneOcclusionCull *dummy_occlusion_culling = nullptr;
@@ -262,6 +270,61 @@ public:
 		}
 	};
 
+	// To be used with PortalRenderInfo, provides data for culling through portals
+	struct PortalCullInfo {
+		Plane planes[5]; // We don't have a far plane, because we also test with the regular frustum which will handle that for us
+		PlaneSign signs[5];
+		Frustum frustum;
+
+		// Based off Camera3D::project_position and Camera3D::unproject_position (we tried doing a simple to/from clipspace projection but it didn't work)
+		/*
+		static Vector3 far_project_position(const Vector3 &p_position, const Transform3D &p_cam_transform, const Projection &p_cam_projection) {
+			Plane clip_plane(p_cam_transform.xform_inv(p_position), 1.0);
+			clip_plane = p_cam_projection.xform4(clip_plane);
+
+			Vector2 point = Vector2(clip_plane.normal.x, clip_plane.normal.y);
+			float depth = -p_cam_projection.get_z_far();
+
+			Plane z_slice(Vector3(0, 0, 1), depth);
+			Vector3 res;
+			z_slice.intersect_3(p_cam_projection.get_projection_plane(Projection::Planes::PLANE_RIGHT), p_cam_projection.get_projection_plane(Projection::Planes::PLANE_TOP), &res);
+			Vector2 vp_he(res.x, res.y);
+
+			point.x = point.x * 2.0 - 1.0;
+			point.y = point.y * 2.0 - 1.0;
+			point *= vp_he;
+
+			Vector3 p(point.x, point.y, depth);
+			return p_cam_transform.xform(p);
+		}
+		*/
+
+		void generate_planes(const PortalRenderInfo &p_render_info, const Projection &p_cam_projection);
+
+		bool visible_in_portal(const AABB &p_aabb) const {
+			return p_aabb.inside_convex_shape(planes, sizeof(planes) / sizeof(Plane));
+		}
+
+		bool visible_in_portal(const InstanceBounds &p_bounds) const {
+			if (!p_bounds.in_frustum(frustum)) {
+				return false;
+			}
+
+			for (uint32_t i = 0; i < 5; i++) {
+				Vector3 min(
+					p_bounds.bounds[signs[i].signs[0]],
+					p_bounds.bounds[signs[i].signs[1]],
+					p_bounds.bounds[signs[i].signs[2]]
+				);
+				if (planes[i].distance_to(min) >= 0.0) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+	};
+
 	struct InstanceVisibilityNotifierData;
 
 	struct InstanceData {
@@ -307,6 +370,9 @@ public:
 		// This creates a delay for occlusion culling, which prevents flickering
 		// when jittering the raster occlusion projection.
 		uint64_t occlusion_timeout = 0;
+
+		// What portal indices this instance is visible in - This is assigned from the cull stage
+		PortalMaskData *portal_mask = nullptr;
 	};
 
 	struct InstanceVisibilityData {
@@ -359,6 +425,7 @@ public:
 		SelfList<Instance>::List instances;
 
 		LocalVector<RID> dynamic_lights;
+		List<Instance *> portals;
 
 		PagedArray<InstanceBounds> instance_aabbs;
 		PagedArray<InstanceData> instance_data;
@@ -412,27 +479,28 @@ public:
 
 	struct Instance {
 		RS::InstanceType base_type;
+		uint32_t layer_mask;
+
 		RID base;
+		InstanceBaseData *base_data = nullptr;
 
 		RID skeleton;
 		RID material_override;
 		RID material_overlay;
-
-		RID mesh_instance; //only used for meshes and when skeleton/blendshapes exist
+		RID mesh_instance; // only used for meshes and when skeleton/blendshapes exist
 
 		Transform3D transform;
 		bool teleported = false;
 
-		float lod_bias;
-
 		bool ignore_occlusion_culling;
 		bool ignore_all_culling;
+
+		float lod_bias;
 
 		Vector<RID> materials;
 
 		RS::ShadowCastingSetting cast_shadows;
-
-		uint32_t layer_mask;
+		
 		// Fit in 32 bits.
 		bool mirror : 1;
 		bool receive_shadows : 1;
@@ -453,46 +521,53 @@ public:
 
 		InstanceUniforms instance_uniforms;
 
-		//
+		////
 
 		RID self;
-		//scenario stuff
+
+		/* Scenario Stuff */
+
 		DynamicBVH::ID indexer_id;
+
 		int32_t array_index = -1;
 		int32_t visibility_index = -1;
+
 		float visibility_range_begin = 0.0f;
 		float visibility_range_end = 0.0f;
 		float visibility_range_begin_margin = 0.0f;
 		float visibility_range_end_margin = 0.0f;
+
 		RS::VisibilityRangeFadeMode visibility_range_fade_mode = RS::VISIBILITY_RANGE_FADE_DISABLED;
-		Instance *visibility_parent = nullptr;
-		HashSet<Instance *> visibility_dependencies;
+
 		uint32_t visibility_dependencies_depth = 0;
 		float transparency = 0.0f;
+
+		Instance *visibility_parent = nullptr;
+		HashSet<Instance *> visibility_dependencies;
+
 		Scenario *scenario = nullptr;
 		SelfList<Instance> scenario_item;
 
-		//aabb stuff
+		////
+
+		// AABB stuff
+		AABB *custom_aabb = nullptr; // <Zylann> would using aabb directly with a bool be better?
 		bool update_aabb;
 		bool update_dependencies;
+		
+		// Sorting
+		bool use_aabb_center = true;
+		float sorting_offset = 0.0;
 
-		SelfList<Instance> update_item;
-
-		AABB *custom_aabb = nullptr; // <Zylann> would using aabb directly with a bool be better?
 		float extra_margin;
 		ObjectID object_id;
 
-		// sorting
-		float sorting_offset = 0.0;
-		bool use_aabb_center = true;
+		SelfList<Instance> update_item;
 
 		Vector<Color> lightmap_target_sh; //target is used for incrementally changing the SH over time, this avoids pops in some corner cases and when going interior <-> exterior
 
 		uint64_t last_frame_pass;
-
 		uint64_t version; // changes to this, and changes to base increase version
-
-		InstanceBaseData *base_data = nullptr;
 
 		SelfList<InstancePair>::List pairs;
 		uint64_t pair_check;
@@ -823,6 +898,12 @@ public:
 		}
 	};
 
+	struct InstancePortalData : public InstanceBaseData {
+		RID instance;
+		RID portal;	// Just for fast access in culling 
+		List<Instance *>::Element *scenario_instance;
+	};
+
 	mutable uint64_t pair_pass = 1;
 
 	struct PairInstances {
@@ -887,6 +968,7 @@ public:
 	PagedArrayPool<Instance *> instance_cull_page_pool;
 	PagedArrayPool<RenderGeometryInstance *> geometry_instance_cull_page_pool;
 	PagedArrayPool<RID> rid_cull_page_pool;
+	PagedArrayPool<PortalMaskData> portal_masks_pool;
 
 	PagedArray<Instance *> instance_cull_result;
 	PagedArray<Instance *> instance_shadow_cull_result;
@@ -901,6 +983,8 @@ public:
 		PagedArray<RID> voxel_gi_instances;
 		PagedArray<RID> mesh_instances;
 		PagedArray<RID> fog_volumes;
+
+		PersistentPagedArray<PortalMaskData> portal_masks;
 
 		struct DirectionalShadow {
 			PagedArray<RenderGeometryInstance *> cascade_geometry_instances[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
@@ -919,6 +1003,8 @@ public:
 			voxel_gi_instances.clear();
 			mesh_instances.clear();
 			fog_volumes.clear();
+			portal_masks.clear();
+
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].clear();
@@ -944,6 +1030,8 @@ public:
 			voxel_gi_instances.reset();
 			mesh_instances.reset();
 			fog_volumes.reset();
+			portal_masks.reset();
+
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].reset();
@@ -969,6 +1057,7 @@ public:
 			voxel_gi_instances.merge_unordered(p_cull_result.voxel_gi_instances);
 			mesh_instances.merge_unordered(p_cull_result.mesh_instances);
 			fog_volumes.merge_unordered(p_cull_result.fog_volumes);
+			portal_masks.merge_unordered(p_cull_result.portal_masks);
 
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
@@ -985,7 +1074,7 @@ public:
 			}
 		}
 
-		void init(PagedArrayPool<RID> *p_rid_pool, PagedArrayPool<RenderGeometryInstance *> *p_geometry_instance_pool, PagedArrayPool<Instance *> *p_instance_pool) {
+		void init(PagedArrayPool<RID> *p_rid_pool, PagedArrayPool<RenderGeometryInstance *> *p_geometry_instance_pool, PagedArrayPool<Instance *> *p_instance_pool, PagedArrayPool<PortalMaskData> *p_portal_mask_pool) {
 			geometry_instances.set_page_pool(p_geometry_instance_pool);
 			light_instances.set_page_pool(p_rid_pool);
 			lights.set_page_pool(p_instance_pool);
@@ -995,6 +1084,8 @@ public:
 			voxel_gi_instances.set_page_pool(p_rid_pool);
 			mesh_instances.set_page_pool(p_rid_pool);
 			fog_volumes.set_page_pool(p_rid_pool);
+			portal_masks.set_page_pool(p_portal_mask_pool);
+
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].set_page_pool(p_geometry_instance_pool);
@@ -1091,7 +1182,7 @@ public:
 
 	_FORCE_INLINE_ bool _light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers = 0xFFFFFF);
 
-	RID _render_get_environment(RID p_camera, RID p_scenario);
+	RID _render_get_environment(RID p_camera, RID p_scenario, bool *force_environment = nullptr);
 	RID _render_get_compositor(RID p_camera, RID p_scenario);
 
 	struct Cull {
@@ -1143,29 +1234,61 @@ public:
 
 	void _visibility_cull_threaded(uint32_t p_thread, VisibilityCullData *cull_data);
 	void _visibility_cull(const VisibilityCullData &cull_data, uint64_t p_from, uint64_t p_to);
+
 	template <bool p_fade_check>
 	_FORCE_INLINE_ int _visibility_range_check(InstanceVisibilityData &r_vis_data, const Vector3 &p_camera_pos, uint64_t p_viewport_mask);
+	_FORCE_INLINE_ bool _visibility_parent_check(const Scenario *p_scenario, const InstanceData &p_instance_data);
+
+	struct PortalCull {
+		RID environment;
+		bool force_environment;	// Whether or not the camera environment is forced
+		Vector<PortalRenderInfo> portals;
+		Vector<PortalCullInfo> cull_portals;
+	};
 
 	struct CullData {
 		Cull *cull = nullptr;
+		PortalCull *portal_cull = nullptr;
 		Scenario *scenario = nullptr;
+
 		RID shadow_atlas;
 		Transform3D cam_transform;
-		uint32_t visible_layers;
+
 		Instance *render_reflection_probe = nullptr;
 		const RendererSceneOcclusionCull::HZBuffer *occlusion_buffer;
 		const Projection *camera_matrix;
+
 		uint64_t visibility_viewport_mask;
+		uint32_t visible_layers;
+		bool main_scenario = true;
 	};
 
 	void _scene_cull_threaded(uint32_t p_thread, CullData *cull_data);
 	void _scene_cull(CullData &cull_data, InstanceCullResult &cull_result, uint64_t p_from, uint64_t p_to);
+	void _portal_cull(CullData &cull_data);
 	static void _scene_particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis);
-	_FORCE_INLINE_ bool _visibility_parent_check(const CullData &p_cull_data, const InstanceData &p_instance_data);
+	bool _visibility_check(Scenario *p_scenario, const InstanceData &p_idata, const Transform3D &p_cam_transform, uint64_t p_visibility_viewport_mask);
 
 	bool _render_reflection_probe_step(Instance *p_instance, int p_step);
 
-	void _render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows = true, RenderInfo *r_render_info = nullptr);
+	void _render_scene(
+		const RendererSceneRender::CameraData *p_camera_data,
+		const Ref<RenderSceneBuffers> &p_render_buffers,
+		RID p_environment,
+		RID p_force_camera_attributes,
+		RID p_compositor,
+		uint32_t p_visible_layers,
+		RID p_scenario,
+		RID p_viewport,
+		RID p_shadow_atlas,
+		RID p_reflection_probe,
+		int p_reflection_probe_pass,
+		float p_screen_mesh_lod_threshold,
+		bool p_using_shadows = true,
+		bool p_force_environment = false,
+		RenderInfo *r_render_info = nullptr
+	);
+
 	void render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas);
 
 	void render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderingMethod::RenderInfo *r_render_info = nullptr);

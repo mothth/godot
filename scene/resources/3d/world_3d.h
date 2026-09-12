@@ -61,7 +61,6 @@ private:
 	Ref<Compositor> compositor;
 
 	HashSet<Camera3D *> cameras;
-	HashSet<Viewport *> viewports;
 	HashSet<SubWorld *> sub_worlds;
 
 protected:
@@ -73,8 +72,6 @@ protected:
 
 	void _register_camera(Camera3D *p_camera);
 	void _remove_camera(Camera3D *p_camera);
-	void _register_viewport(Viewport *p_viewport);
-	void _remove_viewport(Viewport *p_viewport);
 	void _register_sub_world(SubWorld *p_sub_world);
 	void _remove_sub_world(SubWorld *p_sub_world);
 
@@ -98,7 +95,6 @@ public:
 	Ref<Compositor> get_compositor() const;
 
 	_FORCE_INLINE_ const HashSet<Camera3D *> &get_cameras() const { return cameras; }
-	_FORCE_INLINE_ const HashSet<Viewport *> &get_viewports() const { return viewports; }
 	_FORCE_INLINE_ const HashSet<SubWorld *> &get_sub_worlds() const { return sub_worlds; }
 
 #ifndef PHYSICS_3D_DISABLED

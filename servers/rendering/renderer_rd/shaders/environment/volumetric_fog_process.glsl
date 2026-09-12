@@ -178,9 +178,12 @@ layout(set = 0, binding = 14, std140) uniform Params {
 	float temporal_blend;
 
 	vec2 sky_border_size;
-	vec2 pad;
+	uint camera_index;
+	uint camera_count;
 
-	mat3x4 cam_rotation;
+	mat3x4 view_matrix; 
+	mat3x4 inv_view_matrix;
+
 	mat4 to_prev_view;
 
 	mat3 radiance_inverse_xform;
@@ -279,6 +282,16 @@ const float INV_FOG_FADE = 10.0;
 
 void main() {
 	vec3 fog_cell_size = 1.0 / vec3(params.fog_volume_size);
+
+	mat4 read_view_matrix = transpose(mat4(params.view_matrix[0],
+		params.view_matrix[1],
+		params.view_matrix[2],
+		vec4(0.0, 0.0, 0.0, 1.0)));
+	
+	mat4 inv_view_matrix = transpose(mat4(params.inv_view_matrix[0],
+		params.inv_view_matrix[1],
+		params.inv_view_matrix[2],
+		vec4(0.0, 0.0, 0.0, 1.0)));
 
 #ifdef MODE_DENSITY
 
@@ -384,32 +397,32 @@ void main() {
 		for (uint i = 0; i < params.directional_light_count; i++) {
 			if (directional_lights.data[i].volumetric_fog_energy > 0.001) {
 				vec3 shadow_attenuation = vec3(1.0);
+				vec3 light_dir = mat3(read_view_matrix) * directional_lights.data[i].direction;
 
 				if (directional_lights.data[i].shadow_opacity > 0.001) {
 					float depth_z = -view_pos.z;
 
 					vec4 pssm_coord;
-					vec3 light_dir = directional_lights.data[i].direction;
 					vec4 v = vec4(view_pos, 1.0);
 					float z_range;
 
 					if (depth_z < directional_lights.data[i].shadow_split_offsets.x) {
-						pssm_coord = (directional_lights.data[i].shadow_matrix1 * v);
+						pssm_coord = (directional_lights.data[i].shadow_matrix1 * inv_view_matrix * v);
 						pssm_coord /= pssm_coord.w;
 						z_range = directional_lights.data[i].shadow_z_range.x;
 
 					} else if (depth_z < directional_lights.data[i].shadow_split_offsets.y) {
-						pssm_coord = (directional_lights.data[i].shadow_matrix2 * v);
+						pssm_coord = (directional_lights.data[i].shadow_matrix2 * inv_view_matrix * v);
 						pssm_coord /= pssm_coord.w;
 						z_range = directional_lights.data[i].shadow_z_range.y;
 
 					} else if (depth_z < directional_lights.data[i].shadow_split_offsets.z) {
-						pssm_coord = (directional_lights.data[i].shadow_matrix3 * v);
+						pssm_coord = (directional_lights.data[i].shadow_matrix3 * inv_view_matrix * v);
 						pssm_coord /= pssm_coord.w;
 						z_range = directional_lights.data[i].shadow_z_range.z;
 
 					} else {
-						pssm_coord = (directional_lights.data[i].shadow_matrix4 * v);
+						pssm_coord = (directional_lights.data[i].shadow_matrix4 * inv_view_matrix * v);
 						pssm_coord /= pssm_coord.w;
 						z_range = directional_lights.data[i].shadow_z_range.w;
 					}
@@ -422,7 +435,7 @@ void main() {
 					shadow_attenuation = mix(vec3(1.0 - directional_lights.data[i].shadow_opacity), vec3(1.0), shadow);
 				}
 
-				total_light += shadow_attenuation * directional_lights.data[i].color * directional_lights.data[i].energy * henyey_greenstein(dot(normalize(view_pos), normalize(directional_lights.data[i].direction)), params.phase_g) * directional_lights.data[i].volumetric_fog_energy;
+				total_light += shadow_attenuation * directional_lights.data[i].color * directional_lights.data[i].energy * henyey_greenstein(dot(normalize(view_pos), normalize(light_dir)), params.phase_g) * directional_lights.data[i].volumetric_fog_energy;
 			}
 		}
 
@@ -473,8 +486,8 @@ void main() {
 					//	continue; //not masked
 					//}
 
-					vec3 light_pos = omni_lights.data[light_index].position;
-					float d = distance(omni_lights.data[light_index].position, view_pos);
+					vec3 light_pos = (read_view_matrix * vec4(omni_lights.data[light_index].position, 1.0)).xyz;
+					float d = distance(light_pos, view_pos);
 					float shadow_attenuation = 1.0;
 
 					if (omni_lights.data[light_index].volumetric_fog_energy > 0.001 && d * omni_lights.data[light_index].inv_radius < 1.0) {
@@ -487,7 +500,7 @@ void main() {
 							vec4 uv_rect = omni_lights.data[light_index].atlas_rect;
 							vec2 flip_offset = omni_lights.data[light_index].direction.xy;
 
-							vec3 local_vert = (omni_lights.data[light_index].shadow_matrix * vec4(view_pos, 1.0)).xyz;
+							vec3 local_vert = (omni_lights.data[light_index].shadow_matrix * inv_view_matrix * vec4(view_pos, 1.0)).xyz;
 
 							float shadow_len = length(local_vert); //need to remember shadow len from here
 							vec3 shadow_sample = normalize(local_vert);
@@ -540,15 +553,15 @@ void main() {
 
 					uint light_index = 32 * i + bit;
 
-					vec3 light_pos = spot_lights.data[light_index].position;
-					vec3 light_rel_vec = spot_lights.data[light_index].position - view_pos;
+					vec3 light_pos = (read_view_matrix * vec4(spot_lights.data[light_index].position, 1.0)).xyz;
+					vec3 light_rel_vec = light_pos - view_pos;
 					float d = length(light_rel_vec);
 					float shadow_attenuation = 1.0;
 
 					if (spot_lights.data[light_index].volumetric_fog_energy > 0.001 && d * spot_lights.data[light_index].inv_radius < 1.0) {
 						float attenuation = get_omni_attenuation(d, spot_lights.data[light_index].inv_radius, spot_lights.data[light_index].attenuation);
 
-						vec3 spot_dir = spot_lights.data[light_index].direction;
+						vec3 spot_dir = mat3(read_view_matrix) * spot_lights.data[light_index].direction;
 						float cone_angle = spot_lights.data[light_index].cone_angle;
 						float scos = max(dot(-normalize(light_rel_vec), spot_dir), cone_angle);
 						float spot_rim = max(0.0001, (1.0 - scos) / (1.0 - cone_angle));
@@ -562,7 +575,7 @@ void main() {
 
 							vec4 v = vec4(view_pos, 1.0);
 
-							vec4 splane = (spot_lights.data[light_index].shadow_matrix * v);
+							vec4 splane = (spot_lights.data[light_index].shadow_matrix * inv_view_matrix * v);
 							splane.z -= spot_lights.data[light_index].shadow_bias;
 							splane /= splane.w;
 
@@ -578,7 +591,7 @@ void main() {
 			}
 		}
 
-		vec3 world_pos = mat3(params.cam_rotation) * view_pos;
+		vec3 world_pos = mat3(inv_view_matrix) * view_pos;
 
 		for (uint i = 0; i < params.max_voxel_gi_instances; i++) {
 			vec3 position = (voxel_gi_instances.data[i].xform * vec4(world_pos, 1.0)).xyz;

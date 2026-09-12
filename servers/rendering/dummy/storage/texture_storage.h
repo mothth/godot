@@ -158,6 +158,7 @@ public:
 	virtual void decal_instance_free(RID p_decal_instance) override {}
 	virtual void decal_instance_set_transform(RID p_decal, const Transform3D &p_transform) override {}
 	virtual void decal_instance_set_sorting_offset(RID p_decal_instance, float p_sorting_offset) override {}
+	virtual void decal_instance_set_portal_mask(RID p_decal_instance, const PortalMaskData *p_mask) override {}
 
 	/* RENDER TARGET */
 

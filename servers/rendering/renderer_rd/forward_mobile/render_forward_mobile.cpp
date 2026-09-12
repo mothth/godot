@@ -28,6 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#ifndef MOBILE_RENDERER_DISABLED
+
 #include "render_forward_mobile.h"
 #include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
@@ -3484,3 +3486,5 @@ RenderForwardMobile::~RenderForwardMobile() {
 		memdelete_arr(scene_state.lightmap_captures);
 	}
 }
+
+#endif

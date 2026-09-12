@@ -303,7 +303,10 @@ public:
 	void set_axis_lock(PhysicsServer3D::BodyAxis p_axis, bool p_enabled);
 	bool are_axes_locked() const { return locked_axes != 0; }
 
+	void teleport(const Transform3D &p_teleport_xform);
+
 	virtual bool can_interact_with(const JoltBody3D &p_other) const override;
 	virtual bool can_interact_with(const JoltSoftBody3D &p_other) const override;
 	virtual bool can_interact_with(const JoltArea3D &p_other) const override;
+	virtual bool can_interact_with(const JoltPortal3D &p_other) const override;
 };

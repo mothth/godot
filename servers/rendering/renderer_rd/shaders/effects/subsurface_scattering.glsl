@@ -89,16 +89,19 @@ const vec4 skin_kernel[kernel_size] = vec4[](
 
 layout(push_constant, std430) uniform Params {
 	ivec2 screen_size;
-	float camera_z_far;
-	float camera_z_near;
+	float unit_size;
+	float scale;
+	float depth_scale;
+	
+	// float camera_z_far;
+	// float camera_z_near;
 
 	bool vertical;
 	bool orthogonal;
-	float unit_size;
-	float scale;
+	uint padding;
 
-	float depth_scale;
-	uint pad[3];
+	// Since portal rendering relies on oblique projections, we have to use the actual projection matrix now
+	mat4 inv_projection;
 }
 params;
 
@@ -146,17 +149,24 @@ void main() {
 
 	if (strength > 0.0) {
 		vec2 dir = params.vertical ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
+		float depth_scale = params.unit_size;
 
-		// Fetch linear depth of current pixel:
-		float depth = texture(source_depth, uv).r * 2.0 - 1.0;
-		float depth_scale;
-
+		/* // Pre-portal implementation
 		if (params.orthogonal) {
 			depth = -(depth * (params.camera_z_far - params.camera_z_near) - (params.camera_z_far + params.camera_z_near)) / 2.0;
 			depth_scale = params.unit_size; //remember depth is negative by default in OpenGL
 		} else {
 			depth = 2.0 * params.camera_z_near * params.camera_z_far / (params.camera_z_far + params.camera_z_near + depth * (params.camera_z_far - params.camera_z_near));
 			depth_scale = params.unit_size / depth; //remember depth is negative by default in OpenGL
+		}
+		*/
+
+		if (!params.orthogonal) {
+			// Fetch linear depth of current pixel:
+			float depth = texture(source_depth, uv).r * 2.0 - 1.0;
+			vec4 viewspace = params.inv_projection * vec4(uv * 2.0 - 1.0, depth, 1.0);
+			viewspace.xyz /= viewspace.w;
+			depth_scale /= abs(viewspace.z);
 		}
 
 		float scale = mix(params.scale, depth_scale, params.depth_scale);

@@ -211,7 +211,9 @@ public:
 
 		// Not in cache, create:
 
-		return _allocate_from_data(1, h, table_idx, Vector<RID>{ args... }, Vector<RD::FramebufferPass>());
+		RID rid = _allocate_from_data(1, h, table_idx, Vector<RID>{ args... }, Vector<RD::FramebufferPass>());
+		ERR_FAIL_COND_V(rid.is_null(), RID());
+		return rid;
 	}
 
 	template <typename... Args>
@@ -236,7 +238,9 @@ public:
 
 		// Not in cache, create:
 
-		return _allocate_from_data(p_views, h, table_idx, Vector<RID>{ args... }, Vector<RD::FramebufferPass>());
+		RID rid = _allocate_from_data(p_views, h, table_idx, Vector<RID>{ args... }, Vector<RD::FramebufferPass>());
+		ERR_FAIL_COND_V(rid.is_null(), RID());
+		return rid;
 	}
 
 	RID get_cache_multipass(const Vector<RID> &p_textures, const Vector<RD::FramebufferPass> &p_passes, uint32_t p_views = 1) {
@@ -285,7 +289,9 @@ public:
 		}
 
 		// Not in cache, create:
-		return _allocate_from_data(p_views, h, table_idx, p_textures, p_passes);
+		RID rid = _allocate_from_data(p_views, h, table_idx, p_textures, p_passes);
+		ERR_FAIL_COND_V(rid.is_null(), RID());
+		return rid;
 	}
 
 	static RID get_cache_multipass_array(const TypedArray<RID> &p_textures, const TypedArray<RDFramebufferPass> &p_passes, uint32_t p_views = 1);

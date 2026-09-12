@@ -101,7 +101,9 @@ const PackedStringArray ProjectSettings::_get_supported_features() {
 
 #ifdef RD_ENABLED
 	features.append("Forward Plus");
+#ifndef MOBILE_RENDERER_DISABLED
 	features.append("Mobile");
+#endif
 #endif
 
 #ifdef GLES3_ENABLED

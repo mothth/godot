@@ -1768,8 +1768,8 @@ void SSEffects::sub_surface_scattering(Ref<RenderSceneBuffersRD> p_render_buffer
 	{ //scale color and depth to half
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
-		sss.push_constant.camera_z_far = p_camera.get_z_far();
-		sss.push_constant.camera_z_near = p_camera.get_z_near();
+		// sss.push_constant.camera_z_far = p_camera.get_z_far();
+		// sss.push_constant.camera_z_near = p_camera.get_z_near();
 		sss.push_constant.orthogonal = p_camera.is_orthogonal();
 		sss.push_constant.unit_size = unit_size;
 		sss.push_constant.screen_size[0] = p_screen_size.x;
@@ -1777,6 +1777,14 @@ void SSEffects::sub_surface_scattering(Ref<RenderSceneBuffersRD> p_render_buffer
 		sss.push_constant.vertical = false;
 		sss.push_constant.scale = sss_scale;
 		sss.push_constant.depth_scale = sss_depth_scale;
+
+		Projection correction = Projection::create_depth_correction(true);
+		Projection inv_projection = (correction * p_camera).inverse();
+		for (int y = 0; y < 4; y++) {
+			for (int x = 0; x < 4; x++) {
+				sss.push_constant.inv_projection[y][x] = inv_projection.columns[y][x];
+			}
+		}
 
 		RID shader = sss.shader.version_get_shader(sss.shader_version, sss_quality - 1);
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, sss.pipelines[sss_quality - 1].get_rid());

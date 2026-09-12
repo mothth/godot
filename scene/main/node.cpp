@@ -350,7 +350,7 @@ void Node::_propagate_enter_tree() {
 	}
 
 	data.viewport = Object::cast_to<Viewport>(this);
-	if (!data.viewport && !Object::cast_to<SubWorld>(this)) {
+	if (!data.viewport) {
 		data.viewport = data.parent ? data.parent->data.viewport : nullptr;
 	}
 

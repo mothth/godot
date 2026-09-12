@@ -172,6 +172,7 @@ void RendererCompositorRD::finalize() {
 	memdelete(mesh_storage);
 	memdelete(material_storage);
 	memdelete(texture_storage);
+	memdelete(portal_storage);
 	memdelete(utilities);
 
 	//only need to erase these, the rest are erased by cascade
@@ -316,18 +317,22 @@ RendererCompositorRD::RendererCompositorRD() {
 	mesh_storage = memnew(RendererRD::MeshStorage);
 	light_storage = memnew(RendererRD::LightStorage);
 	particles_storage = memnew(RendererRD::ParticlesStorage);
+	portal_storage = memnew(RendererRD::PortalStorage);
 	fog = memnew(RendererRD::Fog);
 	canvas = memnew(RendererCanvasRenderRD());
 
 	String rendering_method = OS::get_singleton()->get_current_rendering_method();
 	uint64_t textures_per_stage = RD::get_singleton()->limit_get(RD::LIMIT_MAX_TEXTURES_PER_SHADER_STAGE);
 
+#ifndef MOBILE_RENDERER_DISABLED
 	if (rendering_method == "mobile" || textures_per_stage < 48) {
 		if (rendering_method == "forward_plus") {
 			WARN_PRINT_ONCE("Platform supports less than 48 textures per stage which is less than required by the Clustered renderer. Defaulting to Mobile renderer.");
 		}
 		scene = memnew(RendererSceneRenderImplementation::RenderForwardMobile());
-	} else if (rendering_method == "forward_plus") {
+	} else
+#endif
+	if (rendering_method == "forward_plus") {
 		scene = memnew(RendererSceneRenderImplementation::RenderForwardClustered());
 	} else {
 		// Fall back to our high end renderer.

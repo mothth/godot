@@ -114,6 +114,7 @@ public:
 	void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) override {}
 	void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override {}
 	void light_instance_mark_visible(RID p_light_instance) override {}
+	void light_instance_set_portal_mask(RID p_light_instance, const PortalMaskData *p_mask) override {}
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override { return false; }
 
 	/* PROBE API */
@@ -168,6 +169,7 @@ public:
 	virtual bool reflection_probe_instance_end_render(RID p_instance, RID p_reflection_atlas) override { return false; }
 	virtual Ref<RenderSceneBuffers> reflection_probe_atlas_get_render_buffers(RID p_reflection_atlas) override { return Ref<RenderSceneBuffers>(); }
 	virtual bool reflection_probe_instance_postprocess_step(RID p_instance) override { return true; }
+	virtual void reflection_probe_instance_set_portal_mask(RID p_instance, const PortalMaskData *p_mask) override {}
 
 	/* LIGHTMAP CAPTURE */
 

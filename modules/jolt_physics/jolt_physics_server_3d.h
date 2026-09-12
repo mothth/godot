@@ -40,6 +40,7 @@ class JoltJoint3D;
 class JoltShape3D;
 class JoltSoftBody3D;
 class JoltSpace3D;
+class JoltPortal3D;
 
 class JoltPhysicsServer3D final : public PhysicsServer3D {
 	GDCLASS(JoltPhysicsServer3D, PhysicsServer3D)
@@ -52,6 +53,7 @@ class JoltPhysicsServer3D final : public PhysicsServer3D {
 	mutable RID_PtrOwner<JoltSoftBody3D, true> soft_body_owner;
 	mutable RID_PtrOwner<JoltShape3D, true> shape_owner;
 	mutable RID_PtrOwner<JoltJoint3D, true> joint_owner;
+	mutable RID_PtrOwner<JoltPortal3D, true> portal_owner;
 
 	HashSet<JoltSpace3D *> active_spaces;
 
@@ -437,12 +439,14 @@ public:
 	void free_soft_body(JoltSoftBody3D *p_body);
 	void free_shape(JoltShape3D *p_shape);
 	void free_joint(JoltJoint3D *p_joint);
+	void free_portal(JoltPortal3D *p_portal);
 
 	JoltSpace3D *get_space(RID p_rid) const { return space_owner.get_or_null(p_rid); }
 	JoltArea3D *get_area(RID p_rid) const { return area_owner.get_or_null(p_rid); }
 	JoltBody3D *get_body(RID p_rid) const { return body_owner.get_or_null(p_rid); }
 	JoltShape3D *get_shape(RID p_rid) const { return shape_owner.get_or_null(p_rid); }
 	JoltJoint3D *get_joint(RID p_rid) const { return joint_owner.get_or_null(p_rid); }
+	JoltPortal3D *get_portal(RID p_rid) const { return portal_owner.get_or_null(p_rid); }
 
 #ifdef DEBUG_ENABLED
 	void dump_debug_snapshots(const String &p_dir);
@@ -496,6 +500,46 @@ public:
 
 	float generic_6dof_joint_get_applied_force(RID p_joint);
 	float generic_6dof_joint_get_applied_torque(RID p_joint);
+
+	/* Portal API */
+
+	virtual RID portal_create() override;
+
+	virtual void portal_set_space(RID p_portal, RID p_space) override;
+	virtual RID portal_get_space(RID p_portal) const override;
+	
+	virtual void portal_set_partner(RID p_portal, RID p_partner) override;
+	virtual RID portal_get_partner(RID p_portal) const override;
+
+	virtual void portal_set_ghost_mode(RID p_portal, PortalGhostMode p_mode) override;
+	virtual PortalGhostMode portal_get_ghost_mode(RID p_portal) const override;
+
+	virtual void portal_set_collision_layer(RID p_portal, uint32_t p_layer) override;
+	virtual uint32_t portal_get_collision_layer(RID p_portal) const override;
+
+	virtual void portal_set_teleport_mask(RID p_portal, uint32_t p_mask) override;
+	virtual uint32_t portal_get_teleport_mask(RID p_portal) const override;
+
+	virtual void portal_attach_object_instance_id(RID p_portal, ObjectID p_id) override;
+	virtual ObjectID portal_get_object_instance_id(RID p_portal) const override;
+
+	virtual void portal_set_transform(RID p_portal, const Transform3D &p_transform) override;
+	virtual Transform3D portal_get_transform(RID p_portal) const override;
+
+	virtual void portal_set_shape_type(RID p_portal, PortalShapeType p_type) override;
+	virtual PortalShapeType portal_get_shape_type(RID p_portal) const override;
+
+	virtual void portal_set_shape_data(RID p_portal, const Variant &p_data) override;
+	virtual Variant portal_get_shape_data(RID p_portal) const override;
+
+	virtual void portal_set_disabled(RID p_portal, bool p_disabled) override;
+	virtual bool portal_is_disabled(RID p_portal) const override;
+
+	virtual void portal_set_monitor_callback(RID p_portal, const Callable &p_callback) override;
+	virtual void portal_set_teleport_callback(RID p_portal, const Callable &p_callback) override;
+
+	virtual void portal_set_param(RID p_portal, PortalParameter p_param, const Variant &p_value) override;
+	virtual Variant portal_get_param(RID p_portal, PortalParameter p_param) const override;
 };
 
 VARIANT_ENUM_CAST(JoltPhysicsServer3D::HingeJointParamJolt)

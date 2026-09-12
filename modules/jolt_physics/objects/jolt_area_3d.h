@@ -188,8 +188,6 @@ public:
 
 	virtual Vector3 get_velocity_at_position(const Vector3 &p_position) const override;
 
-	virtual bool reports_contacts() const override { return false; }
-
 	bool is_point_gravity() const { return point_gravity; }
 	void set_point_gravity(bool p_enabled);
 

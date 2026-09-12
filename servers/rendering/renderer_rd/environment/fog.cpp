@@ -1058,21 +1058,15 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 		fog_near_size = frustum_near_size.maxf(0.001);
 	}
 
-	params.fog_frustum_size_begin[0] = fog_near_size.x;
-	params.fog_frustum_size_begin[1] = fog_near_size.y;
-
-	params.fog_frustum_size_end[0] = fog_far_size.x;
-	params.fog_frustum_size_end[1] = fog_far_size.y;
+	params.fog_frustum_size_begin = fog_near_size;
+	params.fog_frustum_size_end = fog_far_size;
 
 	params.ambient_inject = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_ambient_inject(p_settings.env) * RendererSceneRenderRD::get_singleton()->environment_get_ambient_light_energy(p_settings.env);
 	params.z_far = z_far;
 
 	params.fog_frustum_end = fog_end;
 
-	Color ambient_color = RendererSceneRenderRD::get_singleton()->environment_get_ambient_light(p_settings.env).srgb_to_linear();
-	params.ambient_color[0] = ambient_color.r;
-	params.ambient_color[1] = ambient_color.g;
-	params.ambient_color[2] = ambient_color.b;
+	params.ambient_color = RendererSceneRenderRD::get_singleton()->environment_get_ambient_light(p_settings.env).srgb_to_linear();
 	params.sky_contribution = RendererSceneRenderRD::get_singleton()->environment_get_ambient_sky_contribution(p_settings.env);
 
 	params.fog_volume_size[0] = fog->width;
@@ -1081,21 +1075,16 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 
 	params.directional_light_count = p_directional_light_count;
 
-	Color emission = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_emission(p_settings.env).srgb_to_linear();
-	params.base_emission[0] = emission.r * RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_emission_energy(p_settings.env);
-	params.base_emission[1] = emission.g * RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_emission_energy(p_settings.env);
-	params.base_emission[2] = emission.b * RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_emission_energy(p_settings.env);
+	params.base_emission = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_emission(p_settings.env).srgb_to_linear() * RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_emission_energy(p_settings.env);
 	params.base_density = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_density(p_settings.env);
 
-	Color base_scattering = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_scattering(p_settings.env).srgb_to_linear();
-	params.base_scattering[0] = base_scattering.r;
-	params.base_scattering[1] = base_scattering.g;
-	params.base_scattering[2] = base_scattering.b;
+	params.base_scattering = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_scattering(p_settings.env).srgb_to_linear();
 	params.phase_g = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_anisotropy(p_settings.env);
 
 	params.detail_spread = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_detail_spread(p_settings.env);
 	params.gi_inject = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_gi_inject(p_settings.env);
 
+	/*
 	params.cam_rotation[0] = p_cam_transform.basis[0][0];
 	params.cam_rotation[1] = p_cam_transform.basis[1][0];
 	params.cam_rotation[2] = p_cam_transform.basis[2][0];
@@ -1108,12 +1097,17 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 	params.cam_rotation[9] = p_cam_transform.basis[1][2];
 	params.cam_rotation[10] = p_cam_transform.basis[2][2];
 	params.cam_rotation[11] = 0;
+	*/
+
+	params.view_matrix.store_transform_transposed(p_cam_transform.affine_inverse());
+	params.inv_view_matrix.store_transform_transposed(p_cam_transform);
+
 	params.filter_axis = 0;
 	params.max_voxel_gi_instances = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_gi_inject(p_settings.env) > 0.001 ? p_voxel_gi_count : 0;
 	params.temporal_frame = RSG::rasterizer->get_frame_number() % VolumetricFog::MAX_TEMPORAL_FRAMES;
 
 	Transform3D to_prev_cam_view = p_prev_cam_inv_transform * p_cam_transform;
-	RendererRD::MaterialStorage::store_transform(to_prev_cam_view, params.to_prev_view);
+	params.to_prev_view.store_transform(to_prev_cam_view);
 
 	params.use_temporal_reprojection = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_temporal_reprojection(p_settings.env);
 	params.temporal_blend = RendererSceneRenderRD::get_singleton()->environment_get_volumetric_fog_temporal_reprojection_amount(p_settings.env);
@@ -1135,13 +1129,12 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 		params.cluster_type_size = cluster_screen_width * cluster_screen_height * (params.max_cluster_element_count_div_32 + 32);
 		params.cluster_width = cluster_screen_width;
 
-		params.screen_size[0] = p_settings.rb_size.x;
-		params.screen_size[1] = p_settings.rb_size.y;
+		params.screen_size = p_settings.rb_size;
 	}
 
 	Basis sky_transform = RendererSceneRenderRD::get_singleton()->environment_get_sky_orientation(p_settings.env);
 	sky_transform = sky_transform.inverse() * p_cam_transform.basis;
-	RendererRD::MaterialStorage::store_transform_3x3(sky_transform, params.radiance_inverse_xform);
+	params.radiance_inverse_xform.store_transform(sky_transform);
 
 	RD::get_singleton()->draw_command_begin_label("Render Volumetric Fog");
 

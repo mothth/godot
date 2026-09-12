@@ -38,6 +38,7 @@
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/particles_storage.h"
 #include "servers/rendering/storage/texture_storage.h"
+#include "servers/rendering/storage/portal_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
 class RendererSceneRender;
@@ -82,6 +83,7 @@ public:
 	virtual RendererMeshStorage *get_mesh_storage() = 0;
 	virtual RendererParticlesStorage *get_particles_storage() = 0;
 	virtual RendererTextureStorage *get_texture_storage() = 0;
+	virtual RendererPortalStorage *get_portal_storage() = 0;
 	virtual RendererGI *get_gi() = 0;
 	virtual RendererFog *get_fog() = 0;
 	virtual RendererCanvasRender *get_canvas() = 0;

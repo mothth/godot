@@ -37,14 +37,33 @@
 void WorldEnvironment::_notification(int p_what) {
 	switch (p_what) {
 		case Node3D::NOTIFICATION_ENTER_WORLD:
-		case Node3D::NOTIFICATION_ENTER_TREE:
-		case Node3D::NOTIFICATION_ENTER_VIEWPORT: {
+		case Node3D::NOTIFICATION_ENTER_TREE: {
 
 			// Find world 3D
 			if (!world_3d.is_valid()) {
-				Viewport *vp = get_viewport();
-				if (vp) {
-					world_3d = vp->find_world_3d();
+				Node *parent = get_parent();
+				while (parent) {
+					if (Object::cast_to<Node3D>(parent)) {
+						Node3D *node_3d = static_cast<Node3D *>(parent);
+						world_3d = node_3d->get_world_3d();
+						if (world_3d.is_valid()) {
+							break;
+						}
+					}
+
+					if (Object::cast_to<SubWorld>(parent)) {
+						SubWorld *sub_world = static_cast<SubWorld *>(parent);
+						world_3d = sub_world->find_world_3d();
+						break;
+					}
+
+					if (Object::cast_to<Viewport>(parent)) {
+						Viewport *viewport = static_cast<Viewport *>(parent);
+						world_3d = viewport->find_world_3d();
+						break;
+					}
+
+					parent = parent->get_parent();
 				}
 			}
 
@@ -67,8 +86,7 @@ void WorldEnvironment::_notification(int p_what) {
 		} break;
 
 		case Node3D::NOTIFICATION_EXIT_WORLD:
-		case Node3D::NOTIFICATION_EXIT_TREE:
-		case Node3D::NOTIFICATION_EXIT_VIEWPORT: {
+		case Node3D::NOTIFICATION_EXIT_TREE: {
 			if (world_3d.is_valid()) {
 				if (environment.is_valid()) {
 					remove_from_group("_world_environment_" + itos(world_3d->get_scenario().get_id()));

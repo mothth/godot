@@ -1800,7 +1800,10 @@
 		<constant name="BODY_PARAM_ANGULAR_DAMP" value="9" enum="BodyParameter">
 			Constant to set/get a body's angular damping factor.
 		</constant>
-		<constant name="BODY_PARAM_MAX" value="10" enum="BodyParameter">
+		<constant name="BODY_PARAM_TELEPORT_POINT" value="10" enum="BodyParameter">
+			Constant to set/get the point relative to the body's origin that must pass through a portal before teleporting through it.
+		</constant>
+		<constant name="BODY_PARAM_MAX" value="11" enum="BodyParameter">
 			Represents the size of the [enum BodyParameter] enum.
 		</constant>
 		<constant name="BODY_DAMP_MODE_COMBINE" value="0" enum="BodyDampMode">
@@ -1874,6 +1877,26 @@
 		<constant name="BODY_AXIS_ANGULAR_Y" value="16" enum="BodyAxis">
 		</constant>
 		<constant name="BODY_AXIS_ANGULAR_Z" value="32" enum="BodyAxis">
+		</constant>
+		<constant name="PORTAL_GHOST_NONE" value="0" enum="PortalGhostMode">
+		</constant>
+		<constant name="PORTAL_GHOST" value="1" enum="PortalGhostMode">
+		</constant>
+		<constant name="PORTAL_GHOST_SLICE" value="2" enum="PortalGhostMode">
+		</constant>
+		<constant name="PORTAL_SHAPE_RECTANGLE" value="0" enum="PortalShapeType">
+		</constant>
+		<constant name="PORTAL_SHAPE_CIRCLE" value="1" enum="PortalShapeType">
+		</constant>
+		<constant name="PORTAL_SHAPE_CAPSULE" value="2" enum="PortalShapeType">
+		</constant>
+		<constant name="PORTAL_SHAPE_CONVEX_POLYGON" value="3" enum="PortalShapeType">
+		</constant>
+		<constant name="PORTAL_SHAPE_CONCAVE_POLYGON" value="4" enum="PortalShapeType">
+		</constant>
+		<constant name="PORTAL_PARAM_DOUBLE_SIDED" value="0" enum="PortalParameter">
+		</constant>
+		<constant name="PORTAL_PARAM_MAX_RAY_DEPTH" value="1" enum="PortalParameter">
 		</constant>
 	</constants>
 </class>

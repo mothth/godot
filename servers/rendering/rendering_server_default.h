@@ -686,6 +686,27 @@ public:
 	FUNCRIDSPLIT(occluder)
 	FUNC3(occluder_set_mesh, RID, const PackedVector3Array &, const PackedInt32Array &)
 
+	
+	/* PORTALS */
+#undef ServerName
+#undef server_name
+
+#define ServerName RendererPortalStorage
+#define server_name RSG::portal_storage
+
+	FUNCRIDSPLIT(portal);
+
+	FUNC2(portal_set_double_sided, RID, bool);
+	FUNC2(portal_set_teleport_light, RID, bool);
+	FUNC2(portal_set_teleport_gi, RID, bool);
+	FUNC2(portal_set_mesh, RID, RID);
+	FUNC2(portal_set_destination_transform, RID, const Transform3D &);
+	FUNC2(portal_set_scenario_override, RID, RID);
+	FUNC2(portal_set_environment_override, RID, RID);
+	FUNC2(portal_set_recursive_depth, RID, int);
+	FUNC3(portal_set_cull_mask, RID, PortalCullMaskOp, uint32_t);
+	FUNC2(portal_set_cull_partner, RID, RID);
+
 #undef server_name
 #undef ServerName
 //from now on, calls forwarded to this singleton

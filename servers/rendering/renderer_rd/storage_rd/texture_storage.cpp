@@ -3286,6 +3286,12 @@ void TextureStorage::decal_instance_set_sorting_offset(RID p_decal_instance, flo
 	di->sorting_offset = p_sorting_offset;
 }
 
+void TextureStorage::decal_instance_set_portal_mask(RID p_decal_instance, const PortalMaskData *p_mask) {
+	DecalInstance *di = decal_instance_owner.get_or_null(p_decal_instance);
+	ERR_FAIL_NULL(di);
+	di->portal_mask = p_mask;
+}
+
 /* DECAL DATA API */
 
 void TextureStorage::free_decal_data() {
@@ -3313,7 +3319,7 @@ void TextureStorage::set_max_decals(const uint32_t p_max_decals) {
 	decal_buffer = RD::get_singleton()->storage_buffer_create(decal_buffer_size);
 }
 
-void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform) {
+void TextureStorage::update_decal_buffer(RenderDataRD *p_render_data, const PagedArray<RID> &p_decals, const Transform3D &p_camera_xform) {
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 
 	Transform3D uv_xform;
@@ -3323,6 +3329,10 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 	uint32_t decals_size = p_decals.size();
 
 	decal_count = 0;
+
+	PortalMaskData::List portal_list(p_render_data->portal_count()+1);
+	PersistentPagedArray<PortalMaskData> parity_masks;
+	parity_masks.set_page_pool(&parity_mask_pool);
 
 	for (uint32_t i = 0; i < decals_size; i++) {
 		if (decal_count == max_decals) {
@@ -3340,10 +3350,68 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 		real_t distance = p_camera_xform.origin.distance_to(xform.origin);
 
 		if (decal->distance_fade) {
-			float fade_begin = decal->distance_fade_begin;
-			float fade_length = decal->distance_fade_length;
+			const float fade_begin = decal->distance_fade_begin;
+			const float fade_length = decal->distance_fade_length;
 
-			if (distance > fade_begin) {
+			if (decal_instance->portal_mask) {
+				// If we have fade enabled with portals, then we have to account for portals specifically.
+				// Any views of the decal with no fading is grouped into the same index, while each faded view needs its own index.
+				// We know what portals have a non-faded version of this decal if it is included in the "parity" mask.
+				// (If there is no parity mask, there are either only non-faded versions or faded versions, so it isn't needed.)
+
+				decal_instance->portal_mask->get_portals(portal_list);
+				int count = portal_list.portal_count();
+				int last_parity_portal = -1;
+				PortalMaskData *parity_mask = nullptr;
+				const RenderSceneDataRD &scene_data = *p_render_data->scene_data;
+
+				// Iterate portals
+				for (int j = 0; j < count; j++) {
+					int portal_index = portal_list[j]; 
+					real_t dist = scene_data.get_camera_transform(portal_index).origin.distance_to(xform.origin);
+
+					// Faded light
+					if (dist > fade_begin) {
+						if (dist > fade_begin + fade_length || decal_count >= max_decals-1) {
+							// Decal isn't visible, or we're almost at the max decal count, but purposefully leaving one in case
+							// we want to draw parity versions (those collectively only count as one decal, but may not have been added yet.)
+							continue;
+						}
+
+						if (parity_mask == nullptr && last_parity_portal >= 0) {
+							// We're gonna need a parity mask, create it if we haven't already
+							parity_mask = parity_masks.push_unordered(decal_instance->portal_mask->sub_mask(0, last_parity_portal + 1));
+						}
+
+						// Create unique portal version
+						decal_sort[decal_count].decal_instance = decal_instance;
+						decal_sort[decal_count].decal = decal;
+						decal_sort[decal_count].depth = dist - decal_instance->sorting_offset;
+						decal_sort[decal_count].portal_index = portal_index;
+						decal_sort++;
+					}
+					// Non-faded decal
+					else {
+						if (parity_mask == nullptr && last_parity_portal < 0 && j != 0) {
+							// We have already drawn faded decals, so also create a parity mask here if we haven't yet
+							parity_mask = parity_masks.push_unordered(PortalMaskData());
+							parity_mask->set_portal(portal_index);
+						}
+						else if (parity_mask != nullptr) {
+							parity_mask->set_portal(portal_index);
+						}
+
+						last_parity_portal = portal_index;
+					}
+				}
+
+				decal_instance->parity_mask = parity_mask;
+				if (last_parity_portal < 0) {
+					// We don't have any parity views, so skip from here
+					continue;
+				}
+			} 
+			else if (distance > fade_begin) {
 				if (distance > fade_begin + fade_length) {
 					continue; // do not use this decal, its invisible
 				}
@@ -3353,6 +3421,7 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 		decal_sort[decal_count].decal_instance = decal_instance;
 		decal_sort[decal_count].decal = decal;
 		decal_sort[decal_count].depth = distance - decal_instance->sorting_offset;
+		decal_sort[decal_count].portal_index = -1;
 		decal_count++;
 	}
 
@@ -3374,7 +3443,7 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 
 		float fade = 1.0;
 
-		if (decal->distance_fade) {
+		if (decal->distance_fade && (decal_instance->portal_mask == nullptr || decal_sort[i].portal_index >= 0)) {
 			const real_t distance = decal_sort[i].depth + decal_instance->sorting_offset;
 			const float fade_begin = decal->distance_fade_begin;
 			const float fade_length = decal->distance_fade_length;
@@ -3482,7 +3551,24 @@ void TextureStorage::update_decal_buffer(const PagedArray<RID> &p_decals, const 
 		dd.lower_fade = decal->lower_fade;
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_decal(xform, decal_extents);
+		if (decal_sort[i].portal_index < 0) {
+			// All (or parity) portals
+			if (decal_instance->portal_mask != nullptr) {
+				const PortalMaskData *mask = (decal_instance->parity_mask) ? decal_instance->parity_mask : decal_instance->portal_mask;
+				mask->get_portals(portal_list);
+				for (int j = 0; j < portal_list.portal_count(); j++) {
+					RendererSceneRenderRD::get_singleton()->setup_added_decal(xform, decal_extents, i, portal_list[j]);
+				}
+				// We won't be needing this now, will be freed when `parity_masks` is destructed
+				decal_instance->parity_mask = nullptr;
+			}
+			else {
+				RendererSceneRenderRD::get_singleton()->setup_added_decal(xform, decal_extents, i);
+			}
+		} else {
+			// This decal is for a specific portal
+			RendererSceneRenderRD::get_singleton()->setup_added_decal(xform, decal_extents, i, decal_sort[i].portal_index);
+		}
 	}
 
 	if (decal_count > 0) {

@@ -41,6 +41,7 @@
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/particles_storage.h"
 #include "servers/rendering/storage/texture_storage.h"
+#include "servers/rendering/storage/portal_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
 class RendererCanvasCull;
@@ -57,6 +58,7 @@ public:
 	static inline RendererMeshStorage *mesh_storage = nullptr;
 	static inline RendererParticlesStorage *particles_storage = nullptr;
 	static inline RendererTextureStorage *texture_storage = nullptr;
+	static inline RendererPortalStorage *portal_storage = nullptr;
 	static inline RendererGI *gi = nullptr;
 	static inline RendererFog *fog = nullptr;
 	static inline RendererCameraAttributes *camera_attributes = nullptr;

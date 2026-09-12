@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="Portal3D" inherits="VisualInstance3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		A seamless gate between two locations.
+	</brief_description>
+	<description>
+		A seamless gate between two locations. Provides both visual and physical representations.
+		Can additionally be used to seamlessly link two levels together, even with a differing [World3D].
+	</description>
+	<methods>
+		<method name="get_partner">
+			<return type="void" />
+			<description>
+				Get the partner node of this portal specified by [member partner], if found.
+			</description>
+		</method>
+
+		<method name="teleport_transform">
+			<return type="Transform3D" />
+			<param index="0" name="transform" type="Transform3D" />
+			<description>
+				Return the corresponding transform if [param transform] had teleported through the portal. Requires the portal to have a partner.
+			</description>
+		</method>
+
+		<method name="teleport_point">
+			<return type="Vector3" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				Return the corresponding position if [param point] had teleported through the portal. Requires the portal to have a partner.
+			</description>
+		</method>
+
+		<method name="teleport_direction">
+			<return type="Vector3" />
+			<param index="0" name="direction" type="Vector3" />
+			<description>
+				Return the corresponding directional vector if [param direction] had teleported through the portal. Requires the portal to have a partner.
+			</description>
+		</method>
+
+		<method name="teleport_node">
+			<return type="void" />
+			<param index="0" name="node" type="Node3D" />
+			<description>
+				Force a node to teleport through the portal. Requires the portal to have a partner.
+			</description>
+		</method>
+
+		<method name="is_world_portal">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] if the portal is a [b]world portal[/b], i.e. the portal and its partner have separate [World3D]s.
+			</description>
+		</method>
+
+	</methods>
+	<members>
+		<member name="partner" type="NodePath" setter="set_partner_path" getter="get_partner_path">
+			The node path of the portal's partner. The partner is required to refer back to this portal as its partner for any effect.
+			If the partner is in a different [World3D] than this portal, then the portal is considered a [b]world portal[/b]. If such is the case, [member teleport_path] is required to be set.
+		</member>
+		<member name="teleport_path" type="NodePath" setter="set_teleport_path" getter="get_teleport_path">
+			If set, this is the node path that nodes travelling [i]to[/i] this portal will be reparented to. Otherwise, they will remain where they are in the tree. This is required to be set for world portals (see [member partner]).
+		</member>
+		<member name="custom_mesh" type="Mesh" setter="set_custom_mesh" getter="get_custom_mesh">
+			Set a custom mesh for this portal. By default, a portal is a plane 1m by 1m in size, facing the direction of the portal's front.
+			Therefore, the front of the custom mesh is considered the same, and the "size" of the portal is determined by the mesh's bounding-box,
+			projected from its view from the front. Note that the size of a portal can also be determined by the scale of its transform,
+			but both custom meshes and scaling are valid approaches if just a plane portal is needed, as long as the partner has the same mesh.
+			[b]Note:[/b] Avoid using meshes with multiple surfaces, as only the first surface will be used for rendering.
+		</member>
+		<member name="enabled" type="bool" setter="set_enabled" getter="is_enabled" default="true">
+			Whether or not this portal is enabled. If set to [code]false[/code], the portal will not be visible and nothing can pass through it. This is almost equivalent to setting [member partner] to an empty path, except that the partner is still defined and can still be acquired via [method get_partner].
+			If either this portal or the partner is disabled, then both portals will be disabled.
+		</member>
+		<member name="double_sided" type="bool" setter="set_double_sided" getter="is_double_sided" default="false">
+			Whether or not this portal is double-sided.
+			If [code]true[/code], the portal will be visible from both the front and back faces, and its front view will be mapped the back of its partner and vise-versa. This means if the two portals had identical transforms, they will be equivalent to no portal.
+			If [code]false[/code], the portal will only be visible from the front, and the fronts of both the portal and the partner will be mapped to each other. This means if the two portals had identical transforms, they will behave like a mirror.
+			This property is required to be equivalent between this portal and its partner.
+		</member>
+		<member name="max_recursion_depth" type="int" setter="set_max_recursion_depth" getter="get_max_recursion_depth" default="-1">
+			The maximum recursive depth of this portal. This is capped by [member ProjectSettings.rendering/portals/max_recursive_depth].
+			If [code]0[/code], this portal is incapable of rendering other portals through itself. If [code]1[/code], portals may render through this portal, but those portals cannot render their own, and so on.
+			If [code]-1[/code], the max recursion depth is equal to [member ProjectSettings.rendering/portals/max_recursive_depth].
+		</member>
+		<member name="physics_enabled" type="bool" setter="set_physics_enabled" getter="is_physics_enabled" default="true">
+			Whether or not this portal handles physics. If [code]true[/code], [PhysicsBody3D]s can pass through this portal on their own. Otherwise, nodes can only teleport through this portal via [method teleport_node].
+			This property is required to be equivalent between this portal and its partner.
+		</member>
+		<member name="teleport_audio" type="bool" setter="set_teleport_audio" getter="teleports_audio" default="true">
+			Whether or not this portal is capable of teleporting audio. If [code]true[/code], [AudioStreamPlayer3D]s may be heard through the portal, even if they're a very large distance away. Note that this can be disabled per [AudioStreamPlayer3D].
+		</member>
+		<member name="collision_ghost_mode" type="int" setter="set_collision_ghost_mode" getter="get_collision_ghost_mode" enum="Portal3D.CollisionGhostMode" default="1">
+			The behaviour of [CollisionObject3D]s passing through this portal. Requires [member physics_enabled] to be [code]true[/code].
+		</member>
+		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="1">
+			The physics layers this portal is in. If any given [PhysicsBody3D] includes any of this portal's collision layers in its [member CollisionObject3D.collision_mask], then it is capable of [i]interacting[/i] with this portal, but may not necessarily be capable of entering it. See [member teleport_mask].
+			This may differ from the partner - if such is the case, [PhysicsBody3D]s may only be able to enter from one side. Note that if it had already entered from the partner side, the portal can still be interacted with as long as the portal is never exited.
+			Requires [member physics_enabled] to be [code]true[/code].
+		</member>
+		<member name="teleport_mask" type="int" setter="set_teleport_mask" getter="get_teleport_mask" default="4294967295">
+			The physics layers this portal [b]allows[/b] to enter this portal, if they are set in [member collision_layer]. If any given [PhysicsBody3D] is on the same layer as this portal and this mask includes any of the layers set in [member PhysicsBody3D.collision_layer], then it is capable of traversing through the portal. Otherwise, interacting [PhysicsBody3D]s will simply be stopped by the portal, treating it like an immovable wall.
+			This may differ from the partner - if such is the case, [PhysicsBody3D]s may only allowed to enter from one side. However, they are still allowed to teleport between the portals if it had already entered, as long as the portal is never exited. This only affects whether or not a physics object can [i]begin[/i] entering the portal from a given side.
+			Requires [member physics_enabled] to be [code]true[/code].
+		</member>
+		<member name="teleport_light" type="bool" setter="set_teleport_light" getter="teleports_light" default="false">
+			Whether or not this portal is capable of teleporting dynamic light. If [code]true[/code], [Light3D]s may cast light and shadows through the portal. Note that this can be disabled per [Light3D]. It is recommended that [member Light3D.shadow_enabled] is [code]true[/code] on the [Light3D] if [member double_sided] is [code]true[/code].
+		</member>
+		<member name="teleport_gi" type="bool" setter="set_teleport_gi" getter="teleports_gi" default="false">
+			Whether or not this portal is capable of teleporting global illumination. If [code]true[/code], GI methods may account for it in baking. If you are using [LightmapGI], it is recommended this is only set for static portals.
+			[b]Note:[/b] This is currently [b]only[/b] implemented for [LightmapGI], due to this portal implementation originally being for The Story Machine, which only uses static lightmaps as a GI option. Support for other GI methods are currently not planned.
+		</member>
+		<member name="custom_environment" type="Environment" setter="set_custom_environment" getter="get_custom_environment">
+			The custom environment the portal may use to render. This is used to achieve different post-processing effects in portals.
+			[b]Note:[/b] If a camera sets its own environment, the portal's custom environment will be overriden.
+		</member>
+		<member name="mesh_ghost_mode" type="int" setter="set_mesh_ghost_mode" getter="get_mesh_ghost_mode" enum="Portal3D.MeshGhostMode" default="1">
+			The behaviour of [MeshInstance3D]s passing through this portal.
+			This property is required to be equivalent between this portal and its partner.
+		</member>
+		<member name="cull_mask_operator" type="int" setter="set_cull_mask_operator" getter="get_cull_mask_operator" enum="Portal3D.CullMaskOp" default="0">
+			How the portal's [member cull_mask] is applied when objects are rendered by this portal. See [member cull_mask] and [member Camera3D.cull_mask].
+			These operations stack through portals, always operating on the culling mask that was used to render that portal, which may be from either a [Camera3D] or another [Portal3D].
+		</member>
+		<member name="cull_mask" type="int" setter="set_cull_mask" getter="get_cull_mask" default="1048575">
+			The culling mask that may replace or augment the current camera's own [member Camera3D.cull_mask] when culling objects rendered by this portal. See [member cull_mask_operator].
+		</member>
+	</members>
+	<signals>
+
+		<signal name="node_teleported_from">
+			<param index="0" name="node" type="Node3D" />
+			<description>
+				Emitted when the received [param node] teleports [b]from[/b] this portal to its partner. If [member physics_enabled] is [code]false[/code], this can only be emitted by [method teleport_node].
+			</description>
+		</signal>
+
+		<signal name="node_teleported_to">
+			<param index="0" name="node" type="Node3D" />
+			<description>
+				Emitted when the received [param node] teleports [b]to[/b] this portal from its partner. If [member physics_enabled] is [code]false[/code], this can only be emitted by [method teleport_node] from the partner portal.
+			</description>
+		</signal>
+
+		<signal name="body_entered">
+			<param index="0" name="body" type="PhysicsBody3D" />
+			<description>
+				Emitted when the received [param body] begins entering this portal. Requires [member physics_enabled] to be set to [code]true[/code].
+				The [member partner] will not emit the same signal, though it may emit [signal body_exited] if the body exits on the partner side. In that case, this portal will [b]not[/b] emit a corresponding [signal body_exited].
+			</description>
+		</signal>
+		
+		<signal name="body_exited">
+			<param index="0" name="body" type="PhysicsBody3D" />
+			<description>
+				Emitted when the received [param body] finishes exiting this portal. Requires [member physics_enabled] to be set to [code]true[/code].
+				The [member partner] will not emit the same signal, though it may have emited [signal body_entered] if the body entered from the partner side. In that case, this portal will have [b]not[/b] emited a corresponding [signal body_entered].
+			</description>
+		</signal>
+
+		<signal name="body_shape_entered">
+			<param index="0" name="body_rid" type="RID" />
+			<param index="1" name="body" type="PhysicsBody3D" />
+			<param index="2" name="body_shape_index" type="int" />
+			<description>
+				Emitted when a [Shape3D] of the received [param body] begins entering this portal. Requires [member physics_enabled] to be set to [code]true[/code].
+				The [member partner] will not emit the same signal, though it may emit [signal body_shape_exited] if the body exits on the partner side. In that case, this portal will [b]not[/b] emit a corresponding [signal body_shape_exited].
+				[param body_shape_index] contains indices of the interacting shapes from the interacting body. [param body_rid] contains the [RID] of the body. These values can be used with the [PhysicsServer3D].
+				[b]Example:[/b] Get the [CollisionShape3D] node from the shape index:
+				[codeblocks]
+				[gdscript]
+				var body_shape_owner = body.shape_find_owner(body_shape_index)
+				var body_shape_node = body.shape_owner_get_owner(body_shape_owner)
+				[/gdscript]
+				[/codeblocks]
+			</description>
+		</signal>
+
+		<signal name="body_shape_exited">
+			<param index="0" name="body_rid" type="RID" />
+			<param index="1" name="body" type="PhysicsBody3D" />
+			<param index="2" name="body_shape_index" type="int" />
+			<description>
+				Emitted when a [Shape3D] of the received [param body] finishes exiting this portal. Requires [member physics_enabled] to be set to [code]true[/code].
+				The [member partner] will not emit the same signal, though it may have emited [signal body_shape_entered] if the body entered from the partner side. In that case, this portal will have [b]not[/b] emited a corresponding [signal body_shape_entered].
+				See also [signal body_shape_entered].
+			</description>
+		</signal>
+
+	</signals>
+
+	<constants>
+		<constant name="COLLISION_GHOST_NONE" value="0" enum="CollisionGhostMode">
+			Collision ghosts are not created on the partner side of a portal when a [PhysicsBody3D] is entering it.
+		</constant>
+		<constant name="COLLISION_GHOST" value="1" enum="CollisionGhostMode">
+			A collision ghost is created on the partner side of a portal when a [PhysicsBody3D] is within it, but the collisions of both the body and the ghost are not sliced, meaning the body can still collide with other bodies that are behind either portal. Faster than [constant COLLISION_GHOST_SLICE], but only feasible if no collision objects are expected behind either portal; If your portal is on a wall, nothing will be able to enter it, and [constant COLLISION_GHOST_SLICE] must be used instead. If your portal is static and single-sided, consider removing the collision behind the portal.
+		</constant>
+		<constant name="COLLISION_GHOST_SLICE" value="2" enum="CollisionGhostMode">
+			A collision ghost is created on the partner side of a portal when a [PhysicsBody3D] is within it, and the collisions of both the body and the ghost are sliced by the portal, meaning the body can freely enter the portal without collidind with other bodies behind either portal. Recommended if you are using double-sided portals or your portal is not on a wall.
+		</constant>
+		<constant name="MESH_GHOST_NONE" value="0" enum="MeshGhostMode">
+			Mesh ghosts are not created on the partner side of a portal when a [MeshInstance3D] is entering it. Fastest option, but not recommended if anything is allowed to enter the portal.
+		</constant>
+		<constant name="MESH_GHOST" value="1" enum="MeshGhostMode">
+			A mesh ghost is created on the partner side of a portal when a [MeshInstance3D] is within it, but both the original mesh and ghost are not sliced, meaning the full mesh may still be visible behind the portal. Faster than [constant MESH_GHOST_SLICE], but only feasible if your portal is only visible from one side and nothing is behind any walls the portal may be on.
+		</constant>
+		<constant name="MESH_GHOST_SLICE" value="2" enum="MeshGhostMode">
+			A mesh ghost is created on the partner side of a portal when a [MeshInstance3D] is within it, and both the original mesh and ghost are sliced by the portal, giving the appearance of the mesh truly entering the portal to another location. Recommended if your portal is visible from both sides.
+		</constant>
+		<constant name="CULL_MASK_OP_KEEP" value="0" enum="CullMaskOp">
+			The portal will use the cull mask used to cull itself to cull its own view.
+		</constant>
+		<constant name="CULL_MASK_OP_REPLACE" value="1" enum="CullMaskOp">
+			The portal will use its own defined cull mask to cull its own view.
+		</constant>
+		<constant name="CULL_MASK_OP_AND" value="2" enum="CullMaskOp">
+			The portal will use the result of a bitwise-AND between the cull mask used to cull itself and its own defined cull mask to cull its own view.
+		</constant>
+		<constant name="CULL_MASK_OP_OR" value="3" enum="CullMaskOp">
+			The portal will use the result of a bitwise-OR between the cull mask used to cull itself and its own defined cull mask to cull its own view.
+		</constant>
+		<constant name="CULL_MASK_OP_XOR" value="4" enum="CullMaskOp">
+			The portal will use the result of a bitwise-XOR between the cull mask used to cull itself and its own defined cull mask to cull its own view.
+		</constant>
+		<constant name="NOTIFICATION_PORTAL_STATE_CHANGED" value="50">
+			Notification received when this portal's state is changed in some way, either by enabling / disabling, changing its partner, toggling physics, ect.
+		</constant>
+	</constants>
+</class>

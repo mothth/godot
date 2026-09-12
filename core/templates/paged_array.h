@@ -131,18 +131,19 @@ public:
 
 // PageArray is a local array that is optimized to grow in place, then be cleared often.
 // It does so by allocating pages from a PagedArrayPool.
-// It is safe to use multiple PagedArrays from different threads, sharing a single PagedArrayPool
+// It is safe to use multiple PagedArrays from different threads, sharing a single PagedArrayPool.
 
 template <typename T>
 class PagedArray {
+protected:
 	PagedArrayPool<T> *page_pool = nullptr;
 
 	T **page_data = nullptr;
 	uint32_t *page_ids = nullptr;
+	uint64_t count = 0;
 	uint32_t max_pages_used = 0;
 	uint32_t page_size_shift = 0;
 	uint32_t page_size_mask = 0;
-	uint64_t count = 0;
 
 	_FORCE_INLINE_ uint32_t _get_pages_in_use() const {
 		if (count == 0) {
@@ -368,6 +369,329 @@ public:
 	}
 
 	~PagedArray() {
+		reset();
+	}
+};
+
+// A version of PagedArray that preserves pointers to its elements, even after merges. (In other words, it is pointer-stable.)
+// As a drawback, there may be internal discontinuities in the array after merges that make it slower to index into.
+// It is also no longer guaranteed that elements will be inserted at the end with `push_back`, which means you cannot use `size()-1` to access that element,
+// so `push_back` has been replaced with `push_unordered`.
+
+template <typename T>
+class PersistentPagedArray {
+protected:
+	PagedArrayPool<T> *page_pool = nullptr;
+
+	T **page_data = nullptr;
+	uint32_t *page_ids = nullptr;
+
+	// Stores the first available page-global index of each remainder page.
+	// If we only have one remainder page, this isn't used. (The first available index is equal to the remainder of `count & page_size_mask` in that case.)
+	// This is stored backwards, so the first remainder page has the last index in this array.
+	// (This means we dont have to move the entire array by one element when a remainder page is used up.)
+	uint64_t *remainder_page_ends = nullptr;
+
+	uint64_t count = 0;
+	uint32_t pages_used = 0;
+	uint32_t max_pages_used = 0;
+
+	uint32_t remainder_pages_used = 0;
+	uint32_t max_remainder_pages_used = 0;
+
+	uint32_t page_size_shift = 0;
+	uint32_t page_size_mask = 0;
+
+	void _grow_page_array(uint32_t p_to) {
+		//no more room in the page array to put the new page, make room
+		this->max_pages_used = next_power_of_2(p_to);
+		this->page_data = (T **)memrealloc(this->page_data, sizeof(T *) * this->max_pages_used);
+		this->page_ids = (uint32_t *)memrealloc(this->page_ids, sizeof(uint32_t) * this->max_pages_used);
+	}
+
+	void _grow_remainder_page_array(uint32_t p_to) {
+		max_remainder_pages_used = next_power_of_2(p_to);
+		this->remainder_page_ends = (uint64_t *) memrealloc(this->remainder_page_ends, sizeof(uint64_t) * max_remainder_pages_used);
+	}
+
+	_FORCE_INLINE_ uint64_t &free_remainder_index(uint32_t p_remainder_page = 0) {
+		// We store remainder page ends backwards
+		return remainder_page_ends[remainder_pages_used - p_remainder_page - 1];
+	}
+
+	_FORCE_INLINE_ void _get_page_offset(uint64_t p_index, uint32_t &page, uint32_t &offset) const {
+		page = p_index >> page_size_shift;
+		if (page >= pages_used - remainder_pages_used && remainder_pages_used > 1) {
+			// Account for remainder pages
+			// TODO: We could turn this into a binary search since our array is already sorted, though for our use-cases it doesn't really matter
+			page = pages_used - remainder_pages_used;
+			uint32_t page_size = page_size_mask+1;
+			for (int i = 0; i < remainder_pages_used; i++) {
+				uint64_t free_index = free_remainder_index(i);
+				if (p_index < free_index) {
+					break;
+				}
+				p_index += page_size - (free_index & page_size_mask);
+				page++;
+			}
+		}
+		offset = p_index & page_size_mask;
+	}
+
+public:
+
+	const T &operator[](uint64_t p_index) const {
+		CRASH_BAD_UNSIGNED_INDEX(p_index, count);
+		uint32_t page;
+		uint32_t offset;
+		_get_page_offset(p_index, page, offset);
+		return page_data[page][offset];
+	}
+	
+	T &operator[](uint64_t p_index) {
+		CRASH_BAD_UNSIGNED_INDEX(p_index, count);
+		uint32_t page;
+		uint32_t offset;
+		_get_page_offset(p_index, page, offset);
+		return page_data[page][offset];
+	}
+
+	T *push_unordered(const T &p_value) {
+		uint64_t index;
+
+		if (remainder_pages_used > 0) [[likely]] {
+			// We have a free index we can use already
+			index = (remainder_pages_used > 1) ? free_remainder_index() : count;
+
+			if (((index+1) & page_size_mask) == 0) {
+				// Next index will be the end of the remainder page, which means we can say that this remainder page is used up
+				remainder_pages_used--;
+			}
+			else if (remainder_pages_used > 1) {
+				// Otherwise, if we have multiple remainder pages, increment our next free index for this page
+				free_remainder_index()++;
+			}
+		}
+		else {
+			// Request a new page
+			uint32_t new_page_count = pages_used + 1;
+
+			if (unlikely(new_page_count > max_pages_used)) {
+				ERR_FAIL_NULL_V(page_pool, nullptr); // Safety check.
+				_grow_page_array(next_power_of_2(new_page_count)); //keep out of inline
+			}
+
+			typename PagedArrayPool<T>::PageInfo page_info = page_pool->alloc_page();
+			page_data[pages_used] = page_info.page;
+			page_ids[pages_used] = page_info.page_id;
+			pages_used++;
+			remainder_pages_used++; // We will now have a remainder page to use
+
+			index = count;
+		}
+
+		// place the new value
+		uint32_t page = index >> page_size_shift;
+		uint32_t offset = index & page_size_mask;
+
+		if constexpr (!std::is_trivially_constructible_v<T>) {
+			memnew_placement(&page_data[page][offset], T(p_value));
+		} else {
+			page_data[page][offset] = p_value;
+		}
+
+		count++;
+		return &page_data[page][offset];
+	}
+
+	_FORCE_INLINE_ void pop_back() {
+		ERR_FAIL_COND(count == 0);
+
+		uint32_t page;
+		uint32_t offset;
+		_get_page_offset(count - 1, page, offset);
+
+		if constexpr (!std::is_trivially_destructible_v<T>) {
+			page_data[page][offset].~T();
+		}
+
+		if (unlikely(offset == 1)) {
+			// one element remained, so page must be freed.
+			page_pool->free_page(page_ids[page]);
+			pages_used--;
+			remainder_pages_used--;
+		}
+
+		count--;
+	}
+
+	void remove_at_unordered(uint64_t p_index) {
+		ERR_FAIL_UNSIGNED_INDEX(p_index, count);
+		(*this)[p_index] = (*this)[count - 1];
+		pop_back();
+	}
+
+	void erase(const T *p_element) {
+		uint32_t page_size = page_size_mask + 1;
+		uint32_t full_pages_used = pages_used - remainder_pages_used;
+		for (int i = 0; i < pages_used; i++) {
+			if (p_element > page_data[i] && p_element < page_data[i] + page_size) {
+				// Found element page
+				
+				uint64_t offset = p_element - page_data[i];
+
+				if (i >= full_pages_used && offset >= (free_remainder_index(i - pages_used) & page_size_mask)) [[unlikely]] {
+					// Make sure we don't accidentally erase an element that doesn't exist
+					continue;
+				}
+
+				if constexpr (!std::is_trivially_destructible_v<T>) {
+					page_data[i][offset].~T();
+				}
+
+				if (unlikely(offset == 1)) {
+					// one element remained, so page must be freed.
+					page_pool->free_page(page_ids[i]);
+					pages_used--;
+					remainder_pages_used--;
+				}
+
+				count--;
+				break;
+			}
+		}
+	}
+
+	void clear() {
+		uint32_t full_pages_used = pages_used - remainder_pages_used;
+
+		//destruct if needed
+		if constexpr (!std::is_trivially_destructible_v<T>) {
+			uint64_t index = 0;
+			for (uint64_t i = 0; i < count; i++) {
+				uint32_t page = index >> page_size_shift;
+				uint32_t offset = index & page_size_mask;
+				if (remainder_pages_used > 1 && page >= full_pages_used) {
+					// We're in one of several remainder pages - check if we need to jump
+					if (index >= free_remainder_index(page - full_pages_used)) {
+						page += 1;
+						offset = 0;
+						index = page << page_size_shift;
+					}
+				}
+				
+				page_data[page][offset].~T();
+				index++;
+			}
+		}
+
+		//return the pages to the pagepool, so they can be used by another array eventually
+		for (uint32_t i = 0; i < pages_used; i++) {
+			page_pool->free_page(page_ids[i]);
+		}
+
+		count = 0;
+		pages_used = 0;
+		remainder_pages_used = 0;
+
+		//note we leave page_data and page_indices intact for next use. If you really want to clear them call reset()
+	}
+
+	void reset() {
+		clear();
+		if (page_data) {
+			memfree(page_data);
+			memfree(page_ids);
+			memfree(remainder_page_ends);
+			page_data = nullptr;
+			page_ids = nullptr;
+			remainder_page_ends = nullptr;
+			max_pages_used = 0;
+			max_remainder_pages_used = 0;
+		}
+	}
+
+	void merge_unordered(PersistentPagedArray<T> &p_array) {
+		ERR_FAIL_COND(page_pool != p_array.page_pool);
+
+		uint32_t src_page_index = 0;
+		uint32_t dest_page_index = 0;
+		uint32_t page_size = page_size_mask+1;
+
+		uint32_t new_page_count = pages_used + p_array.pages_used;
+		if (new_page_count > max_pages_used) {
+			_grow_page_array(new_page_count);
+		}
+
+		// Grow remainder page data if needed
+		uint32_t new_remainder_pages_count = remainder_pages_used + p_array.remainder_pages_used;
+		if (new_remainder_pages_count > 1 && new_remainder_pages_count > max_remainder_pages_used) {
+			_grow_remainder_page_array(new_remainder_pages_count);
+		}
+
+		// Move our remainder pages to the end
+		src_page_index = pages_used - remainder_pages_used;
+		dest_page_index = new_page_count - remainder_pages_used;
+		for (uint32_t i = 0; i < remainder_pages_used; i++) {
+			page_data[dest_page_index] = page_data[src_page_index];
+			page_ids[dest_page_index] = page_ids[src_page_index];
+			src_page_index++;
+			dest_page_index++;
+		}
+		
+		// Correct our free remainder indices if needed
+		if (new_remainder_pages_count > 1) {
+			if (remainder_pages_used == 1) {
+				// Our original lone remainder page now needs to store its first free index
+				remainder_page_ends[0] = count + p_array.pages_used * page_size;
+			} else {
+				for (uint32_t i = 0; i < remainder_pages_used; i++) {
+					remainder_page_ends[i] += p_array.pages_used * page_size;
+				}
+			}
+		}
+
+		// Move pages from other array
+		src_page_index = 0;
+		dest_page_index = pages_used - remainder_pages_used;
+		for (uint32_t i = 0; i < p_array.pages_used; i++) {
+			page_data[dest_page_index] = p_array.page_data[src_page_index];
+			page_ids[dest_page_index] = p_array.page_ids[src_page_index];
+			src_page_index++;
+			dest_page_index++;
+		}
+
+		// Copy remainder index data from other array
+		if (p_array.remainder_pages_used > 1) {
+			for (uint32_t i = 0; i < p_array.remainder_pages_used; i++) {
+				remainder_page_ends[i + remainder_pages_used] = p_array.remainder_page_ends[i] + (pages_used - remainder_pages_used) * page_size;
+			}
+		}
+		else if (p_array.remainder_pages_used == 1 && new_remainder_pages_count > 1) {
+			remainder_page_ends[new_remainder_pages_count - 1] = p_array.count + (pages_used - remainder_pages_used) * page_size;
+		}
+
+		count += p_array.count;
+		pages_used = new_page_count;
+		remainder_pages_used = new_remainder_pages_count;
+
+		p_array.count = 0;
+		p_array.pages_used = 0;
+		p_array.remainder_pages_used = 0;
+	}
+
+	_FORCE_INLINE_ uint64_t size() const {
+		return count;
+	}
+
+	void set_page_pool(PagedArrayPool<T> *p_page_pool) {
+		ERR_FAIL_COND(max_pages_used > 0); // Safety check.
+		page_pool = p_page_pool;
+		page_size_mask = page_pool->get_page_size_mask();
+		page_size_shift = page_pool->get_page_size_shift();
+	}
+
+	~PersistentPagedArray() {
 		reset();
 	}
 };

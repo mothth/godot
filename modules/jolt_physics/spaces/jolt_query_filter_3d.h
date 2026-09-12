@@ -52,6 +52,7 @@ class JoltQueryFilter3D final
 	uint32_t collision_mask = 0;
 	bool collide_with_bodies = false;
 	bool collide_with_areas = false;
+	bool collide_with_portals = false;
 	bool picking = false;
 
 public:

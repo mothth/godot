@@ -266,6 +266,7 @@
 #include "scene/3d/visible_on_screen_notifier_3d.h"
 #include "scene/3d/voxel_gi.h"
 #include "scene/3d/world_environment.h"
+#include "scene/3d/portal_3d.h"
 #include "scene/animation/root_motion_view.h"
 #include "scene/resources/3d/fog_material.h"
 #include "scene/resources/3d/importer_mesh.h"
@@ -626,6 +627,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(Camera3D);
 	GDREGISTER_CLASS(AudioListener3D);
 	GDREGISTER_CLASS(MeshInstance3D);
+	GDREGISTER_CLASS(Portal3D);
 #ifndef DISABLE_DEPRECATED
 	MeshInstance3D::use_parent_skeleton_compat = GLOBAL_GET("animation/compatibility/default_parent_skeleton_in_mesh_instance_3d");
 #endif

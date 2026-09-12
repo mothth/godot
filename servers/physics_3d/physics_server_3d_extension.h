@@ -530,6 +530,46 @@ public:
 	EXBIND2(joint_disable_collisions_between_bodies, RID, bool)
 	EXBIND1RC(bool, joint_is_disabled_collisions_between_bodies, RID)
 
+	/* PORTALS */
+
+	EXBIND0R(RID, portal_create)
+
+	EXBIND2(portal_set_space, RID, RID)
+	EXBIND1RC(RID, portal_get_space, RID)
+
+	EXBIND2(portal_set_partner, RID, RID)
+	EXBIND1RC(RID, portal_get_partner, RID)
+
+	EXBIND2(portal_set_ghost_mode, RID, PortalGhostMode)
+	EXBIND1RC(PortalGhostMode, portal_get_ghost_mode, RID)
+
+	EXBIND2(portal_set_collision_layer, RID, uint32_t)
+	EXBIND1RC(uint32_t, portal_get_collision_layer, RID)
+	
+	EXBIND2(portal_set_teleport_mask, RID, uint32_t)
+	EXBIND1RC(uint32_t, portal_get_teleport_mask, RID)
+
+	EXBIND2(portal_attach_object_instance_id, RID, ObjectID)
+	EXBIND1RC(ObjectID, portal_get_object_instance_id, RID)
+
+	EXBIND2(portal_set_transform, RID, const Transform3D &)
+	EXBIND1RC(Transform3D, portal_get_transform, RID)
+
+	EXBIND2(portal_set_shape_type, RID, PortalShapeType)
+	EXBIND1RC(PortalShapeType, portal_get_shape_type, RID)
+
+	EXBIND2(portal_set_shape_data, RID, const Variant &)
+	EXBIND1RC(Variant, portal_get_shape_data, RID)
+
+	EXBIND2(portal_set_disabled, RID, bool)
+	EXBIND1RC(bool, portal_is_disabled, RID)
+
+	EXBIND2(portal_set_monitor_callback, RID, const Callable &)
+	EXBIND2(portal_set_teleport_callback, RID, const Callable &)
+
+	EXBIND3(portal_set_param, RID, PortalParameter, const Variant &)
+	EXBIND2RC(Variant, portal_get_param, RID, PortalParameter)
+
 	/* MISC */
 
 	GDVIRTUAL1_REQUIRED(_free_rid, RID)

@@ -336,7 +336,8 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 			"VERSION:", p_pipeline_key.version,
 			"PASS FLAGS:", p_pipeline_key.color_pass_flags,
 			"SPEC PACKED #0:", p_pipeline_key.shader_specialization.packed_0,
-			"WIREFRAME:", p_pipeline_key.wireframe);
+			"WIREFRAME:", p_pipeline_key.wireframe,
+			"PORTAL STENCIL:", p_pipeline_key.portal_stencil);
 #endif
 
 	// Color pass -> attachment 0: Color/Diffuse, attachment 1: Separate Specular, attachment 2: Motion Vectors
@@ -359,7 +360,7 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 		}
 	}
 
-	bool use_stencil = stencil_enabled && p_pipeline_key.version == PIPELINE_VERSION_COLOR_PASS;
+	bool use_stencil = (stencil_enabled && p_pipeline_key.version == PIPELINE_VERSION_COLOR_PASS) || p_pipeline_key.portal_stencil;
 	depth_stencil_state.enable_stencil = use_stencil;
 	if (use_stencil) {
 		static const RD::CompareOperator stencil_compare_rd_table[STENCIL_COMPARE_MAX] = {
@@ -378,23 +379,35 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 		op.fail = RD::STENCIL_OP_KEEP;
 		op.pass = RD::STENCIL_OP_KEEP;
 		op.depth_fail = RD::STENCIL_OP_KEEP;
-		op.compare = stencil_compare_rd_table[stencil_compare];
-		op.compare_mask = 0;
-		op.write_mask = 0;
-		op.reference = stencil_reference;
 
-		if (stencil_flags & STENCIL_FLAG_READ) {
+		if (p_pipeline_key.portal_stencil) {
+			bool is_opaque = (p_pipeline_key.color_pass_flags & PIPELINE_COLOR_PASS_FLAG_TRANSPARENT) == 0;
+			StencilCompare compare = is_opaque ? STENCIL_COMPARE_EQUAL : STENCIL_COMPARE_LESS_OR_EQUAL;
+
+			op.compare = stencil_compare_rd_table[compare];
 			op.compare_mask = stencil_mask;
+			op.write_mask = 0;
+			op.reference = 0;	// 0 by default, this becomes dynamic
 		}
+		else {
+			op.compare = stencil_compare_rd_table[stencil_compare];
+			op.compare_mask = 0;
+			op.write_mask = 0;
+			op.reference = stencil_reference;
 
-		if (stencil_flags & STENCIL_FLAG_WRITE) {
-			op.pass = RD::STENCIL_OP_REPLACE;
-			op.write_mask = stencil_mask;
-		}
+			if (stencil_flags & STENCIL_FLAG_READ) {
+				op.compare_mask = stencil_mask;
+			}
 
-		if (stencil_flags & STENCIL_FLAG_WRITE_DEPTH_FAIL) {
-			op.depth_fail = RD::STENCIL_OP_REPLACE;
-			op.write_mask = stencil_mask;
+			if (stencil_flags & STENCIL_FLAG_WRITE) {
+				op.pass = RD::STENCIL_OP_REPLACE;
+				op.write_mask = stencil_mask;
+			}
+
+			if (stencil_flags & STENCIL_FLAG_WRITE_DEPTH_FAIL) {
+				op.depth_fail = RD::STENCIL_OP_REPLACE;
+				op.write_mask = stencil_mask;
+			}
 		}
 
 		depth_stencil_state.front_op = op;
@@ -476,6 +489,12 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 		}
 	}
 
+	// Dynamic state
+	BitField<RDD::PipelineDynamicStateFlags> dynamic_state = 0;
+	if (p_pipeline_key.portal_stencil) {
+		dynamic_state.set_flag(RDD::DYNAMIC_STATE_STENCIL_REFERENCE);
+	}
+
 	// Convert the specialization from the key to pipeline specialization constants.
 	Vector<RD::PipelineSpecializationConstant> specialization_constants;
 	RD::PipelineSpecializationConstant sc;
@@ -498,7 +517,7 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader);
 	ERR_FAIL_COND(shader_rid.is_null());
 
-	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants);
+	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, dynamic_state, 0, specialization_constants);
 	ERR_FAIL_COND(pipeline.is_null());
 
 	pipeline_hash_map.add_compiled_pipeline(p_pipeline_key.hash(), pipeline);
@@ -684,6 +703,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		}
 
 		Vector<uint64_t> dynamic_buffers;
+		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 0));
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 2));
 		shader.initialize(shader_versions, p_defines, Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
 
@@ -738,6 +758,8 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.renames["CLIP_SPACE_FAR"] = "SHADER_SPACE_FAR";
 		actions.renames["IN_SHADOW_PASS"] = "bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_IN_SHADOW_PASS)";
 		actions.renames["VIEWPORT_SIZE"] = "read_viewport_size";
+
+		actions.renames["PORTAL_DEPTH"] = "scene_data_block.data.portal_depth";
 
 		actions.renames["FRAGCOORD"] = "gl_FragCoord";
 		actions.renames["FRONT_FACING"] = "gl_FrontFacing";
@@ -928,6 +950,7 @@ void fragment() {
 
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);
+		//default_shader_motion_vectors_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, RenderForwardClustered::COLOR_PASS_FLAG_MOTION_VECTORS, false);
 
 		default_material_shader_ptr = md->shader_data;
 		default_material_uniform_set = md->uniform_set;

@@ -2422,10 +2422,12 @@ RS::CullMode RendererRD::MaterialStorage::material_get_cull_mode(RID p_material)
 			return (RS::CullMode)sd_clustered->cull_mode;
 		}
 
+#ifndef MOBILE_RENDERER_DISABLED
 		RendererSceneRenderImplementation::SceneShaderForwardMobile::ShaderData *sd_mobile = dynamic_cast<RendererSceneRenderImplementation::SceneShaderForwardMobile::ShaderData *>(material->shader->data);
 		if (sd_mobile) {
 			return (RS::CullMode)sd_mobile->cull_mode;
 		}
+#endif
 	}
 	return RS::CULL_MODE_DISABLED;
 }

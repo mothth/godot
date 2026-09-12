@@ -181,6 +181,7 @@ void RendererSceneRender::CameraData::set_multiview_camera(uint32_t p_view_count
 
 	// 16. Use this to build the combined camera matrix.
 	main_projection.set_frustum(local_min_vec.x, local_max_vec.x, local_min_vec.y, local_max_vec.y, z_near, z_far);
+	shadow_projection = main_projection;
 
 	/////////////////////////////////////////////////////////////////////////////
 	// 3. Copy our view data
