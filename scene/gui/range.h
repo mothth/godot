@@ -93,6 +93,7 @@ public:
 	double get_step() const;
 	double get_page() const;
 	double get_as_ratio() const;
+	double to_ratio(double p_val) const;
 
 	void set_use_rounded_values(bool p_enable);
 	bool is_using_rounded_values() const;

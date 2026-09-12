@@ -79,6 +79,7 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 				set_block_signals(false);
 				grab.active = true;
 				grab.uvalue = get_as_ratio();
+				scroll_accum = 0.0;
 
 				_notify_shared_value_changed();
 			} else {
@@ -87,17 +88,39 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 				const bool value_changed = !Math::is_equal_approx((double)grab.value_before_dragging, get_as_ratio());
 				emit_signal(SNAME("drag_ended"), value_changed);
 			}
-		} else if (scrollable) {
-			if (mb->is_pressed() && mb->get_button_index() == MouseButton::WHEEL_UP) {
-				if (get_focus_mode_with_override() != FOCUS_NONE) {
-					grab_focus();
+		} else if (scrollable && mb->is_pressed() && mb->get_button_index() >= MouseButton::WHEEL_UP && mb->get_button_index() <= MouseButton::WHEEL_RIGHT) {
+			if (get_focus_mode_with_override() != FOCUS_NONE) {
+				grab_focus();
+			}
+
+			double sign = (mb->get_button_index() == MouseButton::WHEEL_UP || mb->get_button_index() == MouseButton::WHEEL_RIGHT) ? 1.0 : -1.0;
+			double ratio = get_as_ratio();
+
+			if (get_step() > 0.0) {
+				double step = is_ratio_exp() ? (to_ratio(get_value() + get_step() * sign) - ratio) * sign : get_step() / (get_max() - get_min());
+				double end = sign > 0.0 ? 1.0 : 0.0;
+
+				scroll_accum += mb->get_factor() * scroll_sensitivity * sign;
+				if ((scroll_accum + ratio) * sign - end > 0.0) {
+					// To a avoid visual bug where the slider is unable to visually touch the end due to already being at the end value while scroll_accum is still non-zero
+					scroll_accum = 0.0;
+					set_as_ratio(end);
 				}
-				set_value(get_value() + get_step());
-			} else if (mb->is_pressed() && mb->get_button_index() == MouseButton::WHEEL_DOWN) {
-				if (get_focus_mode_with_override() != FOCUS_NONE) {
-					grab_focus();
+				else {
+					set_block_signals(true);
+					double accum_abs = scroll_accum * sign;
+					if (accum_abs >= step) {
+						double acc = Math::snapped(accum_abs, step) * sign;
+						set_as_ratio(ratio + acc);
+						scroll_accum -= acc;
+					}
+					set_block_signals(false);
 				}
-				set_value(get_value() - get_step());
+
+				_notify_shared_value_changed();
+
+			} else {
+				set_as_ratio(ratio + mb->get_factor() * scroll_sensitivity * sign);
 			}
 		}
 	}
@@ -271,6 +294,7 @@ void Slider::_notification(int p_what) {
 			RID ci = get_canvas_item();
 			Size2i size = get_size();
 			double ratio = Math::is_nan(get_as_ratio()) ? 0 : get_as_ratio();
+			ratio = CLAMP(ratio + scroll_accum, 0.0, 1.0);
 
 			Ref<StyleBox> style = theme_cache.slider_style;
 			Ref<Texture2D> tick = theme_cache.tick_icon;
@@ -373,6 +397,9 @@ void Slider::_validate_property(PropertyInfo &p_property) const {
 	if (p_property.name == "ticks_position") {
 		p_property.hint_string = orientation == VERTICAL ? "Right,Left,Both,Center" : "Bottom,Top,Both,Center";
 	}
+	else if (p_property.name == "scroll_sensitivity" && !scrollable) {
+		p_property.usage = PROPERTY_USAGE_NONE;
+	}
 }
 
 void Slider::set_custom_step(double p_custom_step) {
@@ -438,10 +465,19 @@ bool Slider::is_editable() const {
 
 void Slider::set_scrollable(bool p_scrollable) {
 	scrollable = p_scrollable;
+	notify_property_list_changed();
 }
 
 bool Slider::is_scrollable() const {
 	return scrollable;
+}
+
+void Slider::set_scroll_sensitivity(double p_scroll_sensitivity) {
+	scroll_sensitivity = p_scroll_sensitivity;
+}
+
+double Slider::get_scroll_sensitivity() const {
+	return scroll_sensitivity;
 }
 
 void Slider::_bind_methods() {
@@ -459,11 +495,15 @@ void Slider::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_scrollable", "scrollable"), &Slider::set_scrollable);
 	ClassDB::bind_method(D_METHOD("is_scrollable"), &Slider::is_scrollable);
 
+	ClassDB::bind_method(D_METHOD("set_scroll_sensitivity", "sensitivity"), &Slider::set_scroll_sensitivity);
+	ClassDB::bind_method(D_METHOD("get_scroll_sensitivity"), &Slider::get_scroll_sensitivity);
+
 	ADD_SIGNAL(MethodInfo("drag_started"));
 	ADD_SIGNAL(MethodInfo("drag_ended", PropertyInfo(Variant::BOOL, "value_changed")));
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "editable"), "set_editable", "is_editable");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "scrollable"), "set_scrollable", "is_scrollable");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "scroll_sensitivity"), "set_scroll_sensitivity", "get_scroll_sensitivity");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "tick_count", PROPERTY_HINT_RANGE, "0,4096,1"), "set_ticks", "get_ticks");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ticks_on_borders"), "set_ticks_on_borders", "get_ticks_on_borders");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "ticks_position", PROPERTY_HINT_ENUM), "set_ticks_position", "get_ticks_position");

@@ -64,6 +64,8 @@ private:
 	const float GAMEPAD_EVENT_REPEAT_RATE_MS = 1.0 / 20;
 	float gamepad_event_delay_ms = DEFAULT_GAMEPAD_EVENT_DELAY_MS;
 
+	double scroll_accum = 0.0;
+
 	struct ThemeCache {
 		Ref<StyleBox> slider_style;
 		Ref<StyleBox> grabber_area_style;
@@ -81,6 +83,7 @@ private:
 
 protected:
 	bool ticks_on_borders = false;
+	double scroll_sensitivity = 0.05;
 
 	virtual void gui_input(const Ref<InputEvent> &p_event) override;
 	void _notification(int p_what);
@@ -107,6 +110,9 @@ public:
 
 	void set_scrollable(bool p_scrollable);
 	bool is_scrollable() const;
+
+	void set_scroll_sensitivity(double p_scroll_sensitivity);
+	double get_scroll_sensitivity() const;
 
 	Slider(Orientation p_orientation = VERTICAL);
 };

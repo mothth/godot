@@ -322,6 +322,22 @@ double Range::get_as_ratio() const {
 	}
 }
 
+double Range::to_ratio(double p_val) const {
+	if (Math::is_equal_approx(get_max(), get_min())) {
+		// Avoid division by zero.
+		return 1.0;
+	}
+
+	if (shared->exp_ratio && get_min() >= 0) {
+		double exp_min = get_min() == 0 ? 0.0 : Math::log(get_min()) / Math::log((double)2);
+		double exp_max = Math::log(get_max()) / Math::log((double)2);
+		double v = Math::log(p_val) / Math::log((double)2);
+		return CLAMP((v - exp_min) / (exp_max - exp_min), 0, 1);
+	} else {
+		return CLAMP((p_val - get_min()) / (get_max() - get_min()), 0, 1);
+	}
+}
+
 void Range::_share(Node *p_range) {
 	Range *r = Object::cast_to<Range>(p_range);
 	ERR_FAIL_NULL(r);
